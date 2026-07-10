@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3 } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, easing } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('CategoryElement')
@@ -109,17 +109,29 @@ export class GameManager extends Component {
         const bottomItemScale = bottomItem.getWorldScale(new Vec3());
         const swapCardScale = swapCardItem.getWorldScale(new Vec3());
 
-        bottomItem.setParent(this.fakeCardNode);
-        bottomItem.setWorldPosition(fakeCardWorldPos);
-        bottomItem.setWorldScale(bottomItemScale);
+        // Animate the 4th card moving to the fixed fake card slot.
+        const bottomTween = tween(bottomItem)
+            .to(0.35, { worldPosition: fakeCardWorldPos }, { easing: easing.quadOut });
 
-        swapCardItem.setParent(columnParent);
-        swapCardItem.setWorldPosition(slotPositions[0]);
+        bottomTween.call(() => {
+            bottomItem.setParent(this.fakeCardNode, true);
+            bottomItem.setPosition(Vec3.ZERO);
+            bottomItem.setWorldScale(bottomItemScale);
+        }).start();
+
+        // Move the swap card out of the fake card slot into the tapped column top slot.
+        swapCardItem.setParent(columnParent, true);
         swapCardItem.setWorldScale(swapCardScale);
+        tween(swapCardItem)
+            .to(0.35, { worldPosition: slotPositions[0] }, { easing: easing.quadOut })
+            .start();
 
-        // Shift the remaining cards down one slot.
+        // Move the remaining cards down one by one so the shift is visible.
         for (let i = 0; i < this.itemsPerColumn - 1; i++) {
-            columnItems[i].setWorldPosition(slotPositions[i + 1]);
+            tween(columnItems[i])
+                .delay(i * 0.05)
+                .to(0.35, { worldPosition: slotPositions[i + 1] }, { easing: easing.quadOut })
+                .start();
         }
 
         // Update the board column state for future taps.
