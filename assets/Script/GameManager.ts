@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, easing } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, Label, UITransform } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('CategoryElement')
@@ -19,6 +19,9 @@ export class GameManager extends Component {
     public categoryElements: CategoryElement[] = [];
 
     private boardColumns: Node[][] = [];
+    private categoryLookup: Map<Node, number> = new Map();
+    private completedColumns: Set<Node[]> = new Set();
+    private columnMatchMarks: Map<Node[], Node> = new Map();
     private tapHandlersRegistered: Set<Node> = new Set();
 
     @property({ type: Number })
@@ -26,7 +29,9 @@ export class GameManager extends Component {
 
     start() {
         this.initializeColumns();
+        this.buildCategoryLookup();
         this.setupTapHandlers();
+        this.updateMatchedColumns();
     }
 
     private initializeColumns() {
@@ -108,6 +113,11 @@ export class GameManager extends Component {
             return;
         }
 
+        if (this.completedColumns.has(columnItems)) {
+            console.log('Tapped completed column, ignoring.');
+            return;
+        }
+
         this.swapColumnBottomWithSwapCard(columnItems);
     }
 
@@ -117,6 +127,143 @@ export class GameManager extends Component {
             category.items.forEach((item) => allItems.push(item));
         });
         return allItems;
+    }
+
+    private buildCategoryLookup() {
+        this.categoryLookup.clear();
+        this.categoryElements.forEach((category, categoryIndex) => {
+            category.items.forEach((item) => {
+                this.categoryLookup.set(item, categoryIndex);
+            });
+        });
+    }
+
+    private getCategoryId(item: Node): number {
+        return this.categoryLookup.get(item) ?? -1;
+    }
+
+    private updateMatchedColumns() {
+        this.boardColumns.forEach((column) => {
+            const items = column.slice(0, this.itemsPerColumn);
+            const bottomItem = column.length ? column[column.length - 1] : null;
+
+            if (!bottomItem) {
+                return;
+            }
+
+            if (this.completedColumns.has(column)) {
+                this.setColumnMatchedVisual(items, true, column, bottomItem, true);
+                return;
+            }
+
+            if (items.length !== this.itemsPerColumn) {
+                this.setColumnMatchedVisual(column, false, column, bottomItem, false);
+                return;
+            }
+
+            const categoryId = this.getCategoryId(items[0]);
+            const matched = categoryId !== -1 && items.every((item) => this.getCategoryId(item) === categoryId);
+            if (matched) {
+                this.completeColumn(column);
+            } else {
+                this.setColumnMatchedVisual(items, false, column, bottomItem, false);
+            }
+        });
+    }
+
+    private getHighlightSprites(item: Node): Sprite[] {
+        return item.getComponentsInChildren(Sprite);
+    }
+
+    private isColumnMatched(columnItems: Node[]): boolean {
+        if (columnItems.length < this.itemsPerColumn) {
+            return false;
+        }
+        const categoryId = this.getCategoryId(columnItems[0]);
+        return categoryId !== -1 && columnItems.every((item) => this.getCategoryId(item) === categoryId);
+    }
+
+    private getColumnMatchMarkNode(column: Node[]): Node | null {
+        return this.columnMatchMarks.get(column) || null;
+    }
+
+    private createColumnMatchMark(column: Node[], bottomItem: Node): Node {
+        const markNode = new Node('columnMatchMark');
+        const uiTransform = markNode.addComponent(UITransform);
+        uiTransform.setContentSize(256, 256);
+
+        const label = markNode.addComponent(Label);
+        label.string = '✓';
+        label.fontSize = 80;
+        label.color = new Color(255, 215, 0, 255);
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+
+        markNode.setParent(bottomItem);
+        const offsetY = this.getColumnMarkOffset(bottomItem);
+        markNode.setPosition(new Vec3(0, -offsetY, 0));
+        markNode.setScale(new Vec3(3, 3, 1));
+        markNode.active = false;
+
+        this.columnMatchMarks.set(column, markNode);
+        return markNode;
+    }
+
+    private completeColumn(column: Node[]) {
+        if (this.completedColumns.has(column)) {
+            return;
+        }
+        const items = column.slice(0, this.itemsPerColumn);
+        const bottomItem = column[column.length - 1];
+        this.setColumnMatchedVisual(items, true, column, bottomItem, false);
+        this.completedColumns.add(column);
+    }
+
+    private getColumnMarkOffset(bottomItem: Node): number {
+        const uiTrans = bottomItem.getComponent(UITransform);
+        if (uiTrans) {
+            return uiTrans.contentSize.height * bottomItem.getScale().y * 0.8 + 200;
+        }
+        return 140;
+    }
+
+    private setColumnMatchedVisual(items: Node[], matched: boolean, column: Node[], bottomItem: Node, completed: boolean) {
+        const highlightColor = matched ? new Color(120, 170, 255, 255) : new Color(255, 255, 255, 255);
+        items.forEach((item) => {
+            const sprites = this.getHighlightSprites(item);
+            if (!matched || completed) {
+                sprites.forEach((sprite) => {
+                    sprite.color = highlightColor;
+                });
+            }
+
+            if (matched && !completed) {
+                const originalScale = item.getScale();
+                const midpoint = originalScale.clone();
+                midpoint.x = 0.1;
+                tween(item)
+                    .to(0.12, { scale: midpoint }, { easing: easing.quadOut })
+                    .call(() => {
+                        sprites.forEach((sprite) => {
+                            sprite.color = highlightColor;
+                        });
+                    })
+                    .to(0.12, { scale: originalScale }, { easing: easing.quadOut })
+                    .start();
+            }
+        });
+
+        let markNode = this.getColumnMatchMarkNode(column);
+        if (!markNode && matched) {
+            markNode = this.createColumnMatchMark(column, bottomItem);
+        }
+        if (markNode) {
+            markNode.active = matched;
+            if (matched) {
+                const offsetY = this.getColumnMarkOffset(bottomItem);
+                markNode.setPosition(new Vec3(0, -offsetY, 0));
+            }
+        }
     }
 
     public swapColumnBottomWithSwapCard(columnItems: Node[]) {
@@ -163,6 +310,9 @@ export class GameManager extends Component {
         const newColumnItems = [swapCardItem, ...columnItems.slice(0, this.itemsPerColumn - 1)];
         columnItems.length = 0;
         newColumnItems.forEach((item) => columnItems.push(item));
+
+        // Refresh matched visuals after the swap.
+        this.updateMatchedColumns();
     }
 
     update(deltaTime: number) {
