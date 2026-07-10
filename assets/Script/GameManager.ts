@@ -78,7 +78,7 @@ export class GameManager extends Component {
     }
 
     public onItemTap(tappedItem: Node) {
-        const columnItems = this.boardColumns.find((column) => column.includes(tappedItem));
+        const columnItems = this.boardColumns.find((column) => column.indexOf(tappedItem) !== -1);
         if (!columnItems || columnItems.length < this.itemsPerColumn) {
             console.warn('GameManager: tapped item column has fewer than', this.itemsPerColumn, 'items.');
             return;
