@@ -19,6 +19,7 @@ export class GameManager extends Component {
     public categoryElements: CategoryElement[] = [];
 
     private boardColumns: Node[][] = [];
+    private tapHandlersRegistered: Set<Node> = new Set();
 
     @property({ type: Number })
     public itemsPerColumn: number = 4;
@@ -54,6 +55,21 @@ export class GameManager extends Component {
         this.boardColumns = columns.map((column) => column.items);
     }
 
+    private addTapHandler(item: Node) {
+        if (this.tapHandlersRegistered.has(item)) {
+            return;
+        }
+
+        const handler = () => {
+            console.log('Tapped item', item.name);
+            this.onItemTap(item);
+        };
+
+        item.on(Node.EventType.TOUCH_END, handler, this);
+        item.on(Node.EventType.MOUSE_UP, handler, this);
+        this.tapHandlersRegistered.add(item);
+    }
+
     private setupTapHandlers() {
         if (!this.categoryElements.length) {
             console.warn('GameManager: categoryElements is empty. Assign categories in the inspector.');
@@ -66,18 +82,26 @@ export class GameManager extends Component {
             return;
         }
 
-        allItems.forEach((item) => {
-            const handler = () => {
-                console.log('Tapped item', item.name);
-                this.onItemTap(item);
-            };
+        allItems.forEach((item) => this.addTapHandler(item));
 
-            item.on(Node.EventType.TOUCH_END, handler, this);
-            item.on(Node.EventType.MOUSE_UP, handler, this);
-        });
+        if (this.swapCard) {
+            this.addTapHandler(this.swapCard);
+        } else if (this.fakeCardNode && this.fakeCardNode.children.length) {
+            this.addTapHandler(this.fakeCardNode.children[0]);
+        }
     }
 
     public onItemTap(tappedItem: Node) {
+        if (this.fakeCardNode && tappedItem.parent === this.fakeCardNode) {
+            console.log('Tapped fixed swap slot, ignoring.');
+            return;
+        }
+
+        if (this.swapCard && tappedItem === this.swapCard) {
+            console.log('Tapped the fixed swapCard node, ignoring.');
+            return;
+        }
+
         const columnItems = this.boardColumns.find((column) => column.indexOf(tappedItem) !== -1);
         if (!columnItems || columnItems.length < this.itemsPerColumn) {
             console.warn('GameManager: tapped item column has fewer than', this.itemsPerColumn, 'items.');
@@ -122,6 +146,7 @@ export class GameManager extends Component {
         // Move the swap card out of the fake card slot into the tapped column top slot.
         swapCardItem.setParent(columnParent, true);
         swapCardItem.setWorldScale(swapCardScale);
+        this.addTapHandler(swapCardItem);
         tween(swapCardItem)
             .to(0.35, { worldPosition: slotPositions[0] }, { easing: easing.quadOut })
             .start();
