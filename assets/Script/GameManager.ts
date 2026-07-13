@@ -219,6 +219,17 @@ export class GameManager extends Component {
         this.idleHintActive = true;
         this.idleHintOriginalScales.clear();
 
+        const handPosition = this.getIdleHintHandWorldPosition(hintColumn);
+        if (handPosition) {
+            const tutorialRoot = this.tutorialNode || this.node;
+            const controller = tutorialRoot?.getComponent(TutorialController) || tutorialRoot?.getComponentInChildren(TutorialController);
+            this.tutorialController = controller;
+            if (controller) {
+                tutorialRoot.active = true;
+                controller.playAtWorldPosition(handPosition);
+            }
+        }
+
         hintColumn.forEach((item) => {
             const currentScale = item.getScale().clone();
             this.idleHintOriginalScales.set(item, currentScale);
@@ -251,6 +262,47 @@ export class GameManager extends Component {
         this.idleHintActive = false;
         this.idleHintColumn = null;
         this.idleHintOriginalScales.clear();
+
+        if (this.tutorialController) {
+            this.tutorialController.stopTutorial();
+        }
+        if (this.tutorialNode) {
+            this.tutorialNode.active = false;
+        }
+        this.tutorialController = null;
+    }
+
+    private getIdleHintHandWorldPosition(column: Node[]): Vec3 | null {
+        if (!column.length) {
+            return null;
+        }
+
+        let minX = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+
+        column.forEach((item) => {
+            const itemTransform = item.getComponent(UITransform);
+            if (!itemTransform) {
+                return;
+            }
+
+            const bounds = itemTransform.getBoundingBoxToWorld();
+            minX = Math.min(minX, bounds.x);
+            maxX = Math.max(maxX, bounds.x + bounds.width);
+            minY = Math.min(minY, bounds.y);
+            maxY = Math.max(maxY, bounds.y + bounds.height);
+        });
+
+        if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+            return column[0]?.getWorldPosition(new Vec3()) || null;
+        }
+
+        const centerX = (minX + maxX) * 0.5;
+        const centerY = (minY + maxY) * 0.5;
+        const referencePosition = column[0]?.getWorldPosition(new Vec3()) || new Vec3(centerX, centerY, 0);
+        return new Vec3(centerX + 70, centerY - 50, referencePosition.z);
     }
 
     private getBestIdleHintColumn(): Node[] | null {
