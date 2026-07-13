@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity, Label } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity, Label, Tween } from 'cc';
 import { CTAButtonHandler } from './CTAButtonHandler';
 const { ccclass, property } = _decorator;
 
@@ -35,12 +35,17 @@ export class GameManager extends Component {
     @property(Label)
     public countdownLabel: Label | null = null;
 
+    @property(Label)
+    public tutorialGuideLabel: Label | null = null;
+
     @property(Node)
     public ctaButtonNode: Node | null = null;
 
     private timerStarted: boolean = false;
     private gameEnded: boolean = false;
     private remainingTime: number = 0;
+    private tutorialGuideVisible: boolean = false;
+    private tutorialGuideBaseScale: Vec3 = Vec3.ONE.clone();
 
     start() {
         this.initializeColumns();
@@ -50,6 +55,7 @@ export class GameManager extends Component {
         this.remainingTime = this.gameDurationSeconds;
         this.updateCountdownLabel();
         this.hideCtaNode();
+        this.showGuideLabel();
     }
 
     private initializeColumns() {
@@ -115,6 +121,8 @@ export class GameManager extends Component {
     }
 
     public onItemTap(tappedItem: Node) {
+        this.hideGuideLabel();
+
         if (!this.timerStarted && !this.gameEnded) {
             this.startGameTimer();
         }
@@ -528,6 +536,41 @@ export class GameManager extends Component {
             this.updateMatchedColumns();
             this.isSwapping = false;
         }, 0.62);
+    }
+
+    private showGuideLabel() {
+        if (!this.tutorialGuideLabel || this.tutorialGuideVisible) {
+            return;
+        }
+
+        const guideNode = this.tutorialGuideLabel.node;
+        this.tutorialGuideBaseScale = guideNode.getScale().clone();
+        this.tutorialGuideVisible = true;
+        guideNode.active = true;
+        Tween.stopAllByTarget(guideNode);
+        guideNode.setScale(this.tutorialGuideBaseScale);
+
+        tween(guideNode)
+            .repeatForever(
+                tween()
+                    .to(0.5, { scale: new Vec3(this.tutorialGuideBaseScale.x * 1.08, this.tutorialGuideBaseScale.y * 1.08, this.tutorialGuideBaseScale.z) }, { easing: easing.quadOut })
+                    .to(0.5, { scale: this.tutorialGuideBaseScale }, { easing: easing.quadIn })
+            )
+            .start();
+    }
+
+    private hideGuideLabel() {
+        if (!this.tutorialGuideVisible) {
+            return;
+        }
+
+        this.tutorialGuideVisible = false;
+        if (this.tutorialGuideLabel) {
+            const guideNode = this.tutorialGuideLabel.node;
+            Tween.stopAllByTarget(guideNode);
+            guideNode.setScale(this.tutorialGuideBaseScale);
+            guideNode.active = false;
+        }
     }
 
     private startGameTimer() {
