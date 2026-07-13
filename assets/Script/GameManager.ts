@@ -51,6 +51,9 @@ export class GameManager extends Component {
     @property(Node)
     public ctaButtonNode: Node | null = null;
 
+    @property({ type: Number, tooltip: 'Seconds of inactivity before showing the idle hint.' })
+    public idleHintDelaySeconds: number = 5;
+
     private timerStarted: boolean = false;
     private gameEnded: boolean = false;
     private remainingTime: number = 0;
@@ -58,6 +61,10 @@ export class GameManager extends Component {
     private tutorialGuideBaseScale: Vec3 = Vec3.ONE.clone();
     private tutorialController: TutorialController | null = null;
     private tutorialTargetStage: number = 0;
+    private idleHintActive: boolean = false;
+    private idleHintTimer: number = 0;
+    private idleHintColumn: Node[] | null = null;
+    private idleHintOriginalScales: Map<Node, Vec3> = new Map();
 
     start() {
         this.initializeColumns();
@@ -69,6 +76,10 @@ export class GameManager extends Component {
         this.hideCtaNode();
         this.showGuideLabel();
         this.startTutorial();
+        this.idleHintTimer = 0;
+        this.idleHintActive = false;
+        this.idleHintColumn = null;
+        this.idleHintOriginalScales.clear();
     }
 
     private initializeColumns() {
@@ -134,6 +145,8 @@ export class GameManager extends Component {
     }
 
     public onItemTap(tappedItem: Node) {
+        this.resetIdleHint();
+
         const isFirstTutorialTap = this.tutorialTargetStage === 0 && this.isMatchingTutorialTarget(tappedItem, this.tutorialTargetNode);
         const isSecondTutorialTap = this.tutorialTargetStage === 1 && this.isMatchingTutorialTarget(tappedItem, this.tutorialTargetNode2);
 
@@ -185,6 +198,102 @@ export class GameManager extends Component {
 
     private isMatchingTutorialTarget(tappedItem: Node, targetNode: Node | null): boolean {
         return !!targetNode?.isValid && tappedItem === targetNode;
+    }
+
+    private resetIdleHint() {
+        this.idleHintTimer = 0;
+        this.hideIdleHint();
+    }
+
+    private showIdleHint() {
+        if (this.idleHintActive || this.gameEnded || this.isSwapping) {
+            return;
+        }
+
+        const hintColumn = this.getBestIdleHintColumn();
+        if (!hintColumn?.length) {
+            return;
+        }
+
+        this.idleHintColumn = hintColumn;
+        this.idleHintActive = true;
+        this.idleHintOriginalScales.clear();
+
+        hintColumn.forEach((item) => {
+            const currentScale = item.getScale().clone();
+            this.idleHintOriginalScales.set(item, currentScale);
+            Tween.stopAllByTarget(item);
+            tween(item)
+                .repeatForever(
+                    tween()
+                        .to(0.35, { scale: new Vec3(currentScale.x * 1.08, currentScale.y * 1.08, currentScale.z) }, { easing: easing.quadOut })
+                        .to(0.35, { scale: currentScale }, { easing: easing.quadIn })
+                )
+                .start();
+        });
+    }
+
+    private hideIdleHint() {
+        if (!this.idleHintColumn?.length) {
+            this.idleHintActive = false;
+            this.idleHintOriginalScales.clear();
+            return;
+        }
+
+        this.idleHintColumn.forEach((item) => {
+            Tween.stopAllByTarget(item);
+            const originalScale = this.idleHintOriginalScales.get(item);
+            if (originalScale) {
+                item.setScale(originalScale);
+            }
+        });
+
+        this.idleHintActive = false;
+        this.idleHintColumn = null;
+        this.idleHintOriginalScales.clear();
+    }
+
+    private getBestIdleHintColumn(): Node[] | null {
+        if (!this.fakeCardNode || !this.fakeCardNode.children.length) {
+            return null;
+        }
+
+        const swapCard = this.fakeCardNode.children[0];
+        const swapCategoryId = this.getCategoryId(swapCard);
+        if (swapCategoryId === -1) {
+            return null;
+        }
+
+        let bestColumn: Node[] | null = null;
+        let bestScore = -1;
+
+        this.boardColumns.forEach((column) => {
+            if (this.completedColumns.has(column)) {
+                return;
+            }
+
+            const items = column.slice(0, this.itemsPerColumn);
+            if (items.length < this.itemsPerColumn) {
+                return;
+            }
+
+            const existingItems = items.slice(0, this.itemsPerColumn - 1);
+            if (!existingItems.length) {
+                return;
+            }
+
+            const firstCategoryId = this.getCategoryId(existingItems[0]);
+            const sameCategoryCount = existingItems.filter((item) => this.getCategoryId(item) === firstCategoryId).length;
+            const canCompleteWithSwap = firstCategoryId !== -1 && firstCategoryId === swapCategoryId && sameCategoryCount === existingItems.length;
+            const score = canCompleteWithSwap ? 100 : sameCategoryCount;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestColumn = column;
+            }
+        });
+
+        return bestScore > 0 ? bestColumn : null;
     }
 
     private getAllItems(): Node[] {
@@ -688,6 +797,8 @@ export class GameManager extends Component {
 
         this.timerStarted = true;
         this.remainingTime = this.gameDurationSeconds;
+        this.idleHintTimer = 0;
+        this.hideIdleHint();
         this.updateCountdownLabel();
     }
 
@@ -767,7 +878,7 @@ export class GameManager extends Component {
     }
 
     update(deltaTime: number) {
-        if (!this.timerStarted || this.gameEnded) {
+        if (!this.timerStarted || this.gameEnded || this.isSwapping) {
             return;
         }
 
@@ -776,6 +887,14 @@ export class GameManager extends Component {
 
         if (this.remainingTime <= 0) {
             this.endGame('loss');
+            return;
+        }
+
+        if (!this.idleHintActive) {
+            this.idleHintTimer += deltaTime;
+            if (this.idleHintTimer >= this.idleHintDelaySeconds) {
+                this.showIdleHint();
+            }
         }
     }
 }
