@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, Label, UITransform } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('CategoryElement')
@@ -23,6 +23,7 @@ export class GameManager extends Component {
     private completedColumns: Set<Node[]> = new Set();
     private columnMatchMarks: Map<Node[], Node> = new Map();
     private tapHandlersRegistered: Set<Node> = new Set();
+    private isSwapping: boolean = false;
 
     @property({ type: Number })
     public itemsPerColumn: number = 4;
@@ -97,6 +98,10 @@ export class GameManager extends Component {
     }
 
     public onItemTap(tappedItem: Node) {
+        if (this.isSwapping) {
+            return;
+        }
+
         if (this.fakeCardNode && tappedItem.parent === this.fakeCardNode) {
             console.log('Tapped fixed swap slot, ignoring.');
             return;
@@ -152,12 +157,12 @@ export class GameManager extends Component {
             }
 
             if (this.completedColumns.has(column)) {
-                this.setColumnMatchedVisual(items, true, column, bottomItem, true);
+                this.setColumnMatchedVisual(items, true, column, true);
                 return;
             }
 
             if (items.length !== this.itemsPerColumn) {
-                this.setColumnMatchedVisual(column, false, column, bottomItem, false);
+                this.setColumnMatchedVisual(column, false, column, false);
                 return;
             }
 
@@ -166,7 +171,7 @@ export class GameManager extends Component {
             if (matched) {
                 this.completeColumn(column);
             } else {
-                this.setColumnMatchedVisual(items, false, column, bottomItem, false);
+                this.setColumnMatchedVisual(items, false, column, false);
             }
         });
     }
@@ -187,26 +192,46 @@ export class GameManager extends Component {
         return this.columnMatchMarks.get(column) || null;
     }
 
-    private createColumnMatchMark(column: Node[], bottomItem: Node): Node {
+    private createColumnMatchMark(column: Node[], items: Node[]): Node {
         const markNode = new Node('columnMatchMark');
-        const uiTransform = markNode.addComponent(UITransform);
-        uiTransform.setContentSize(256, 256);
+        markNode.addComponent(UITransform);
+        markNode.addComponent(Graphics);
+        markNode.addComponent(UIOpacity);
 
-        const label = markNode.addComponent(Label);
-        label.string = '✓';
-        label.fontSize = 80;
-        label.color = new Color(255, 215, 0, 255);
-        label.horizontalAlign = Label.HorizontalAlign.CENTER;
-        label.verticalAlign = Label.VerticalAlign.CENTER;
+        const columnParent = items[0]?.parent || column[0]?.parent;
+        if (columnParent) {
+            markNode.setParent(columnParent);
+            markNode.setSiblingIndex(columnParent.children.length - 1);
+        }
 
-        markNode.setParent(bottomItem);
-        const offsetY = this.getColumnMarkOffset(bottomItem);
-        markNode.setPosition(new Vec3(0, -offsetY, 0));
-        markNode.setScale(new Vec3(3, 3, 1));
+        this.layoutColumnMatchMark(markNode, items);
+        this.drawColumnMatchMark(markNode, new Color(255, 222, 79, 255));
         markNode.active = false;
 
         this.columnMatchMarks.set(column, markNode);
         return markNode;
+    }
+
+    private getColumnWorldBounds(items: Node[]): { minX: number; maxX: number; minY: number; maxY: number } | null {
+        const bounds: ReturnType<UITransform['getBoundingBoxToWorld']>[] = [];
+        items.forEach((item) => {
+            const transform = item.getComponent(UITransform);
+            if (transform) {
+                bounds.push(transform.getBoundingBoxToWorld());
+            }
+        });
+
+        if (!bounds.length) {
+            return null;
+        }
+
+        const padding = 3;
+        return {
+            minX: Math.min(...bounds.map((bound) => bound.x)) - padding,
+            maxX: Math.max(...bounds.map((bound) => bound.x + bound.width)) + padding,
+            minY: Math.min(...bounds.map((bound) => bound.y)) - padding,
+            maxY: Math.max(...bounds.map((bound) => bound.y + bound.height)) + padding,
+        };
     }
 
     private completeColumn(column: Node[]) {
@@ -214,21 +239,188 @@ export class GameManager extends Component {
             return;
         }
         const items = column.slice(0, this.itemsPerColumn);
-        const bottomItem = column[column.length - 1];
-        this.setColumnMatchedVisual(items, true, column, bottomItem, false);
+        this.setColumnMatchedVisual(items, true, column, false);
         this.completedColumns.add(column);
     }
 
-    private getColumnMarkOffset(bottomItem: Node): number {
-        const uiTrans = bottomItem.getComponent(UITransform);
-        if (uiTrans) {
-            return uiTrans.contentSize.height * bottomItem.getScale().y * 0.8 + 200;
+    private layoutColumnMatchMark(markNode: Node, items: Node[]) {
+        if (!items.length || !items[0].parent) {
+            return;
         }
-        return 140;
+
+        const parent = items[0].parent;
+        markNode.setSiblingIndex(parent.children.length - 1);
+        const parentTransform = parent.getComponent(UITransform);
+        if (!parentTransform) {
+            return;
+        }
+
+        const parentScale = parent.getWorldScale(new Vec3());
+        const bounds = this.getColumnWorldBounds(items);
+        if (!bounds) {
+            return;
+        }
+
+        const centerWorld = new Vec3((bounds.minX + bounds.maxX) * 0.5, (bounds.minY + bounds.maxY) * 0.5, items[0].getWorldPosition(new Vec3()).z);
+        const centerLocal = parentTransform.convertToNodeSpaceAR(centerWorld);
+        const localWidth = (bounds.maxX - bounds.minX) / Math.max(parentScale.x, 0.01);
+        const localHeight = (bounds.maxY - bounds.minY) / Math.max(parentScale.y, 0.01);
+
+        markNode.setPosition(centerLocal);
+        const transform = markNode.getComponent(UITransform);
+        if (transform) {
+            transform.setContentSize(localWidth, localHeight);
+        }
     }
 
-    private setColumnMatchedVisual(items: Node[], matched: boolean, column: Node[], bottomItem: Node, completed: boolean) {
+    private drawColumnMatchMark(markNode: Node, color: Color) {
+        const graphics = markNode.getComponent(Graphics);
+        const transform = markNode.getComponent(UITransform);
+        if (!graphics || !transform) {
+            return;
+        }
+
+        const width = transform.contentSize.width;
+        const height = transform.contentSize.height;
+        const radius = Math.min(18, width * 0.2, height * 0.08);
+        graphics.clear();
+        graphics.lineWidth = 4;
+        graphics.strokeColor = color;
+        graphics.roundRect(-width * 0.5, -height * 0.5, width, height, radius);
+        graphics.stroke();
+    }
+
+    private playColumnMatchMarkAnimation(markNode: Node) {
+        const opacity = markNode.getComponent(UIOpacity);
+        if (opacity) {
+            opacity.opacity = 255;
+        }
+
+        this.drawColumnMatchMark(markNode, new Color(255, 222, 79, 255));
+        tween(markNode)
+            .delay(0.22)
+            .call(() => {
+                this.drawColumnMatchMark(markNode, new Color(62, 112, 202, 255));
+            })
+            .call(() => {
+                if (opacity) {
+                    opacity.opacity = 255;
+                }
+            })
+            .start();
+    }
+
+    private drawStarParticle(particle: Node, color: Color) {
+        const graphics = particle.getComponent(Graphics);
+        if (!graphics) {
+            return;
+        }
+
+        const outer = 9;
+        const inner = 3.5;
+        graphics.clear();
+        graphics.fillColor = color;
+        for (let i = 0; i < 8; i++) {
+            const radius = i % 2 === 0 ? outer : inner;
+            const angle = Math.PI * 0.25 * i - Math.PI * 0.5;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            if (i === 0) {
+                graphics.moveTo(x, y);
+            } else {
+                graphics.lineTo(x, y);
+            }
+        }
+        graphics.close();
+        graphics.fill();
+    }
+
+    private spawnColumnStarParticles(items: Node[]) {
+        if (!items.length || !items[0].parent) {
+            return;
+        }
+
+        const parent = items[0].parent;
+        const parentTransform = parent.getComponent(UITransform);
+        const bounds = this.getColumnWorldBounds(items);
+        if (!parentTransform || !bounds) {
+            return;
+        }
+
+        const parentScale = parent.getWorldScale(new Vec3());
+        const centerX = (bounds.minX + bounds.maxX) * 0.5;
+        const centerY = (bounds.minY + bounds.maxY) * 0.5;
+        const particleCount = 18;
+
+        for (let i = 0; i < particleCount; i++) {
+            const particle = new Node('columnStarParticle');
+            particle.addComponent(UITransform).setContentSize(24, 24);
+            particle.addComponent(Graphics);
+            particle.addComponent(UIOpacity);
+            particle.setParent(parent);
+            particle.setSiblingIndex(parent.children.length - 1);
+
+            const side = i % 4;
+            const edgeX = side === 0 ? bounds.minX : side === 1 ? bounds.maxX : bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
+            const edgeY = side === 2 ? bounds.minY : side === 3 ? bounds.maxY : bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
+            const startLocal = parentTransform.convertToNodeSpaceAR(new Vec3(edgeX, edgeY, items[0].getWorldPosition(new Vec3()).z));
+            const directionX = (edgeX - centerX) / Math.max(Math.abs(edgeX - centerX), 1);
+            const directionY = (edgeY - centerY) / Math.max(Math.abs(edgeY - centerY), 1);
+            const drift = 16 + Math.random() * 14;
+            const endLocal = new Vec3(
+                startLocal.x + directionX * drift / Math.max(parentScale.x, 0.01),
+                startLocal.y + directionY * drift / Math.max(parentScale.y, 0.01),
+                startLocal.z
+            );
+            const opacity = particle.getComponent(UIOpacity);
+            const scale = 0.45 + Math.random() * 0.35;
+
+            particle.setPosition(startLocal);
+            particle.setScale(new Vec3(0.1, 0.1, 1));
+            if (opacity) {
+                opacity.opacity = 255;
+            }
+            this.drawStarParticle(particle, i % 3 === 0 ? new Color(255, 255, 255, 245) : new Color(255, 220, 64, 255));
+
+            tween(particle)
+                .delay(Math.random() * 0.05)
+                .to(0.11, { scale: new Vec3(scale, scale, 1), position: endLocal }, { easing: easing.quadOut })
+                .delay(0.08)
+                .to(0.14, { scale: new Vec3(0.05, 0.05, 1) }, { easing: easing.quadIn })
+                .call(() => particle.destroy())
+                .start();
+            if (opacity) {
+                tween(opacity)
+                    .delay(0.16)
+                    .to(0.14, { opacity: 0 })
+                    .start();
+            }
+        }
+    }
+
+    private setColumnMatchedVisual(items: Node[], matched: boolean, column: Node[], completed: boolean) {
         const highlightColor = matched ? new Color(120, 170, 255, 255) : new Color(255, 255, 255, 255);
+        let markNode = this.getColumnMatchMarkNode(column);
+        if (!markNode && matched) {
+            markNode = this.createColumnMatchMark(column, items);
+        }
+        if (markNode) {
+            markNode.active = matched;
+            markNode.setScale(Vec3.ONE);
+            if (matched) {
+                this.layoutColumnMatchMark(markNode, items);
+                if (completed) {
+                    const opacity = markNode.getComponent(UIOpacity);
+                    if (opacity) {
+                        opacity.opacity = 255;
+                    }
+                    this.drawColumnMatchMark(markNode, new Color(62, 112, 202, 255));
+                } else {
+                    this.playColumnMatchMarkAnimation(markNode);
+                }
+            }
+        }
+
         items.forEach((item) => {
             const sprites = this.getHighlightSprites(item);
             if (!matched || completed) {
@@ -241,7 +433,11 @@ export class GameManager extends Component {
                 const originalScale = item.getScale();
                 const midpoint = originalScale.clone();
                 midpoint.x = 0.1;
+                if (item === items[0]) {
+                    this.spawnColumnStarParticles(items);
+                }
                 tween(item)
+                    .delay(0.08)
                     .to(0.12, { scale: midpoint }, { easing: easing.quadOut })
                     .call(() => {
                         sprites.forEach((sprite) => {
@@ -252,24 +448,15 @@ export class GameManager extends Component {
                     .start();
             }
         });
-
-        let markNode = this.getColumnMatchMarkNode(column);
-        if (!markNode && matched) {
-            markNode = this.createColumnMatchMark(column, bottomItem);
-        }
-        if (markNode) {
-            markNode.active = matched;
-            if (matched) {
-                const offsetY = this.getColumnMarkOffset(bottomItem);
-                markNode.setPosition(new Vec3(0, -offsetY, 0));
-            }
-        }
     }
 
     public swapColumnBottomWithSwapCard(columnItems: Node[]) {
         if (!this.fakeCardNode) return;
         if (columnItems.length < this.itemsPerColumn) return;
         if (!this.fakeCardNode.children.length) return;
+        if (this.isSwapping) return;
+
+        this.isSwapping = true;
 
         const swapCardItem = this.fakeCardNode.children[0];
         const slotPositions = columnItems.slice(0, this.itemsPerColumn).map((item) => item.getWorldPosition(new Vec3()));
@@ -311,8 +498,11 @@ export class GameManager extends Component {
         columnItems.length = 0;
         newColumnItems.forEach((item) => columnItems.push(item));
 
-        // Refresh matched visuals after the swap.
-        this.updateMatchedColumns();
+        // Refresh matched visuals after all cards have settled into their final slots.
+        this.scheduleOnce(() => {
+            this.updateMatchedColumns();
+            this.isSwapping = false;
+        }, 0.62);
     }
 
     update(deltaTime: number) {
