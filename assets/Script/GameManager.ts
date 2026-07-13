@@ -1,4 +1,5 @@
-import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity, Label } from 'cc';
+import { CTAButtonHandler } from './CTAButtonHandler';
 const { ccclass, property } = _decorator;
 
 @ccclass('CategoryElement')
@@ -28,11 +29,27 @@ export class GameManager extends Component {
     @property({ type: Number })
     public itemsPerColumn: number = 4;
 
+    @property({ type: Number })
+    public gameDurationSeconds: number = 45;
+
+    @property(Label)
+    public countdownLabel: Label | null = null;
+
+    @property(Node)
+    public ctaButtonNode: Node | null = null;
+
+    private timerStarted: boolean = false;
+    private gameEnded: boolean = false;
+    private remainingTime: number = 0;
+
     start() {
         this.initializeColumns();
         this.buildCategoryLookup();
         this.setupTapHandlers();
         this.updateMatchedColumns();
+        this.remainingTime = this.gameDurationSeconds;
+        this.updateCountdownLabel();
+        this.hideCtaNode();
     }
 
     private initializeColumns() {
@@ -98,7 +115,11 @@ export class GameManager extends Component {
     }
 
     public onItemTap(tappedItem: Node) {
-        if (this.isSwapping) {
+        if (!this.timerStarted && !this.gameEnded) {
+            this.startGameTimer();
+        }
+
+        if (this.gameEnded || this.isSwapping) {
             return;
         }
 
@@ -174,6 +195,10 @@ export class GameManager extends Component {
                 this.setColumnMatchedVisual(items, false, column, false);
             }
         });
+
+        if (!this.gameEnded && this.isAllColumnsCompleted()) {
+            this.endGame('win');
+        }
     }
 
     private getHighlightSprites(item: Node): Sprite[] {
@@ -505,8 +530,102 @@ export class GameManager extends Component {
         }, 0.62);
     }
 
+    private startGameTimer() {
+        if (this.timerStarted || this.gameEnded) {
+            return;
+        }
+
+        this.timerStarted = true;
+        this.remainingTime = this.gameDurationSeconds;
+        this.updateCountdownLabel();
+    }
+
+    private updateCountdownLabel() {
+        if (!this.countdownLabel) {
+            return;
+        }
+
+        const totalSeconds = Math.max(0, Math.ceil(this.remainingTime));
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        const formatTime = (value: number) => (value < 10 ? `0${value}` : `${value}`);
+        this.countdownLabel.string = `${formatTime(minutes)}:${formatTime(seconds)}`;
+    }
+
+    private isAllColumnsCompleted(): boolean {
+        return this.boardColumns.length > 0 && this.boardColumns.every((column) => this.completedColumns.has(column));
+    }
+
+    private hideCtaNode() {
+        const ctaNode = this.getCtaRootNode();
+        if (ctaNode) {
+            ctaNode.active = false;
+        }
+    }
+
+    private getCtaRootNode(): Node | null {
+        if (this.ctaButtonNode) {
+            return this.ctaButtonNode;
+        }
+
+        const handler = this.node.getComponent(CTAButtonHandler) || this.node.getComponentInChildren(CTAButtonHandler);
+        return handler ? handler.node : null;
+    }
+
+    private getCtaHandler(): CTAButtonHandler | null {
+        if (this.ctaButtonNode) {
+            return this.ctaButtonNode.getComponent(CTAButtonHandler);
+        }
+
+        return this.node.getComponent(CTAButtonHandler) || this.node.getComponentInChildren(CTAButtonHandler) || null;
+    }
+
+    private triggerCtaForEndScreen(result: 'win' | 'loss') {
+        const ctaHandler = this.getCtaHandler();
+        const ctaNode = this.getCtaRootNode();
+
+        if (ctaNode) {
+            ctaNode.active = true;
+        }
+
+        if (ctaHandler) {
+            console.log(`Game ended with ${result}; triggering CTA end screen.`);
+            ctaHandler.onStoreButtonClicked();
+        } else {
+            console.warn('GameManager: CTAButtonHandler not found. Assign the CTA node in the inspector or attach the component to the game node.');
+        }
+    }
+
+    private endGame(result: 'win' | 'loss') {
+        if (this.gameEnded) {
+            return;
+        }
+
+        this.gameEnded = true;
+        this.timerStarted = false;
+        this.remainingTime = 0;
+        this.updateCountdownLabel();
+
+        if (result === 'win') {
+            console.log('Game over: you won.');
+        } else {
+            console.log('Game over: time is up.');
+        }
+
+        this.triggerCtaForEndScreen(result);
+    }
+
     update(deltaTime: number) {
-        
+        if (!this.timerStarted || this.gameEnded) {
+            return;
+        }
+
+        this.remainingTime = Math.max(0, this.remainingTime - deltaTime);
+        this.updateCountdownLabel();
+
+        if (this.remainingTime <= 0) {
+            this.endGame('loss');
+        }
     }
 }
 

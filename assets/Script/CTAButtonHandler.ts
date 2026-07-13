@@ -1,4 +1,4 @@
-import { _decorator, Component, AudioSource, find, CCString, sys } from 'cc';
+import { _decorator, Component, AudioSource, find, CCString, sys, tween, easing } from 'cc';
 import { Analytics, analyticsEvents } from './Analytics';
 
 const { ccclass, property } = _decorator;
@@ -38,6 +38,32 @@ export class CTAButtonHandler extends Component {
 
     private onMraidReady(): void {
         this.isMraidReady = true;
+    }
+
+    private swingTween: any = null;
+
+    onEnable() {
+        this.startSwingAnimation();
+    }
+
+    onDisable() {
+        if (this.swingTween) {
+            this.swingTween.stop();
+            this.swingTween = null;
+        }
+    }
+
+    private startSwingAnimation(): void {
+        if (this.swingTween) {
+            this.swingTween.stop();
+        }
+
+        this.swingTween = tween(this.node)
+            .to(1, { angle: 6 }, { easing: easing.quadInOut })
+            .to(1, { angle: -6 }, { easing: easing.quadInOut })
+            .union()
+            .repeatForever()
+            .start();
     }
 
     /**
