@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity, Label, Tween } from 'cc';
 import { CTAButtonHandler } from './CTAButtonHandler';
+import { TutorialController } from './TutorialController';
 const { ccclass, property } = _decorator;
 
 @ccclass('CategoryElement')
@@ -39,6 +40,15 @@ export class GameManager extends Component {
     public tutorialGuideLabel: Label | null = null;
 
     @property(Node)
+    public tutorialNode: Node | null = null;
+
+    @property(Node)
+    public tutorialTargetNode: Node | null = null;
+
+    @property(Node)
+    public tutorialTargetNode2: Node | null = null;
+
+    @property(Node)
     public ctaButtonNode: Node | null = null;
 
     private timerStarted: boolean = false;
@@ -46,6 +56,8 @@ export class GameManager extends Component {
     private remainingTime: number = 0;
     private tutorialGuideVisible: boolean = false;
     private tutorialGuideBaseScale: Vec3 = Vec3.ONE.clone();
+    private tutorialController: TutorialController | null = null;
+    private tutorialTargetStage: number = 0;
 
     start() {
         this.initializeColumns();
@@ -56,6 +68,7 @@ export class GameManager extends Component {
         this.updateCountdownLabel();
         this.hideCtaNode();
         this.showGuideLabel();
+        this.startTutorial();
     }
 
     private initializeColumns() {
@@ -121,10 +134,19 @@ export class GameManager extends Component {
     }
 
     public onItemTap(tappedItem: Node) {
-        this.hideGuideLabel();
+        const isFirstTutorialTap = this.tutorialTargetStage === 0 && this.isMatchingTutorialTarget(tappedItem, this.tutorialTargetNode);
+        const isSecondTutorialTap = this.tutorialTargetStage === 1 && this.isMatchingTutorialTarget(tappedItem, this.tutorialTargetNode2);
 
-        if (!this.timerStarted && !this.gameEnded) {
+        if (isFirstTutorialTap) {
+            this.tutorialTargetStage = 1;
+            this.stopTutorial();
+        } else if (isSecondTutorialTap) {
+            this.tutorialTargetStage = 2;
+            this.stopTutorial();
+            this.hideGuideLabel();
             this.startGameTimer();
+        } else {
+            this.stopTutorial();
         }
 
         if (this.gameEnded || this.isSwapping) {
@@ -153,6 +175,16 @@ export class GameManager extends Component {
         }
 
         this.swapColumnBottomWithSwapCard(columnItems);
+
+        if (isFirstTutorialTap) {
+            this.scheduleOnce(() => {
+                this.startTutorial();
+            }, 0.7);
+        }
+    }
+
+    private isMatchingTutorialTarget(tappedItem: Node, targetNode: Node | null): boolean {
+        return !!targetNode?.isValid && tappedItem === targetNode;
     }
 
     private getAllItems(): Node[] {
@@ -536,6 +568,82 @@ export class GameManager extends Component {
             this.updateMatchedColumns();
             this.isSwapping = false;
         }, 0.62);
+    }
+
+    private startTutorial() {
+        const tutorialRoot = this.tutorialNode || this.node;
+        if (!tutorialRoot) {
+            return;
+        }
+
+        const targetNode = this.getTutorialTargetNode();
+        if (!targetNode) {
+            return;
+        }
+
+        tutorialRoot.active = true;
+        this.scheduleOnce(() => {
+            const controller = tutorialRoot.getComponent(TutorialController) || tutorialRoot.getComponentInChildren(TutorialController);
+            this.tutorialController = controller;
+
+            if (controller) {
+                const handPosition = this.getTutorialHandWorldPosition(targetNode);
+                if (handPosition) {
+                    controller.playAtWorldPosition(handPosition);
+                }
+            }
+        }, 0.05);
+    }
+
+    private getTutorialTargetNode(): Node | null {
+        if (this.tutorialTargetStage === 1 && this.tutorialTargetNode2?.isValid) {
+            return this.tutorialTargetNode2;
+        }
+
+        if (this.tutorialTargetNode?.isValid) {
+            return this.tutorialTargetNode;
+        }
+
+        if (this.swapCard) {
+            return this.swapCard;
+        }
+
+        if (this.fakeCardNode && this.fakeCardNode.children.length) {
+            return this.fakeCardNode.children[0];
+        }
+
+        return this.categoryElements[0]?.items[0] || null;
+    }
+
+    private getTutorialHandWorldPosition(targetNode: Node): Vec3 | null {
+        if (!targetNode?.isValid) {
+            return null;
+        }
+
+        const targetUIT = targetNode.getComponent(UITransform);
+        const worldPosition = targetNode.getWorldPosition(new Vec3());
+
+        if (targetUIT) {
+            const bounds = targetUIT.getBoundingBoxToWorld();
+            if (bounds) {
+                worldPosition.x = bounds.x + bounds.width * 0.5+60;
+                worldPosition.y = bounds.y + bounds.height * 0.5 - 68;
+            }
+        }
+
+        return worldPosition;
+    }
+
+    private stopTutorial() {
+        if (this.tutorialController) {
+            this.tutorialController.stopTutorial();
+        }
+
+        if (this.tutorialNode) {
+            this.tutorialNode.active = false;
+        }
+
+        this.tutorialController = null;
     }
 
     private showGuideLabel() {

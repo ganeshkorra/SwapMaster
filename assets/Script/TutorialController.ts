@@ -5,26 +5,51 @@ const { ccclass, property } = _decorator;
 
 @ccclass('TutorialController')
 export class TutorialController extends Component {
-    @property({ type: Node, tooltip: "The hand sprite node that will be animated." })
+    @property({ type: Node, tooltip: 'The hand child node that will be animated.' })
     public handNode: Node | null = null;
 
-    @property({ type: SpriteFrame, tooltip: "The sprite for the idle/pointing hand." })
+    @property({ type: SpriteFrame, tooltip: 'The sprite for the idle/pointing hand.' })
     public idleHandSprite: SpriteFrame | null = null;
 
-    @property({ type: SpriteFrame, tooltip: "The sprite for the hand when it is 'clicked down'." })
+    @property({ type: SpriteFrame, tooltip: 'The sprite for the hand when it is clicked down.' })
     public clickHandSprite: SpriteFrame | null = null;
 
     private handTween: Tween<Node> | null = null;
 
+    private getAnimatedHandNode(): Node | null {
+        return this.handNode || this.node;
+    }
+
+    private getHandSprite(): Sprite | null {
+        const animatedNode = this.getAnimatedHandNode();
+        if (!animatedNode) {
+            return null;
+        }
+
+        return animatedNode.getComponent(Sprite) || animatedNode.getComponentInChildren(Sprite) || null;
+    }
+
     public playTutorial(startNode: Node, endNode: Node): void {
-        if (!this.handNode || !this.idleHandSprite || !this.clickHandSprite) return;
-        
-        // --- ADDED SAFETY CHECK ---
-        // Ensure nodes are valid when starting the tutorial
+        const animatedNode = this.getAnimatedHandNode();
+        if (!animatedNode || !this.idleHandSprite || !this.clickHandSprite) return;
+
         if (!startNode || !endNode || !startNode.isValid || !endNode.isValid) return;
 
-        this.handNode.active = true;
+        animatedNode.active = true;
         this.runAnimationLoop(startNode, endNode);
+    }
+
+    private findFirstUITransform(startNode: Node | null): UITransform | null {
+        let current: Node | null = startNode;
+        while (current) {
+            const uiTransform = current.getComponent(UITransform);
+            if (uiTransform) {
+                return uiTransform;
+            }
+            current = current.parent;
+        }
+
+        return null;
     }
 
     public stopTutorial(): void {
@@ -32,35 +57,35 @@ export class TutorialController extends Component {
             this.handTween.stop();
             this.handTween = null;
         }
-        if (this.handNode) {
-            this.handNode.active = false;
+
+        const animatedNode = this.getAnimatedHandNode();
+        if (animatedNode) {
+            animatedNode.active = false;
         }
     }
 
     private runAnimationLoop(startNode: Node, endNode: Node): void {
-        const handSprite = this.handNode?.getComponent(Sprite);
-        if (!handSprite) return;
+        const animatedNode = this.getAnimatedHandNode();
+        const handSprite = this.getHandSprite();
+        if (!animatedNode || !handSprite) return;
 
-        // --- THE MOST IMPORTANT FIX IS HERE ---
-        // Before starting a new loop, check if the target nodes were destroyed.
         if (!startNode.isValid || !endNode.isValid) {
             this.stopTutorial();
-            return; // Exit gracefully
+            return;
         }
-        
+
         const startPosition = this.getUIPosition(startNode);
         const endPosition = this.getUIPosition(endNode);
 
-        // If a node was destroyed while getting position, it will return null
         if (!startPosition || !endPosition) {
             this.stopTutorial();
             return;
         }
 
         handSprite.spriteFrame = this.idleHandSprite;
-        this.handNode!.setPosition(startPosition);
+        animatedNode.setPosition(startPosition);
 
-        this.handTween = tween(this.handNode!)
+        this.handTween = tween(animatedNode)
             .delay(0.5)
             .call(() => {
                 handSprite.spriteFrame = this.clickHandSprite!;
@@ -72,68 +97,74 @@ export class TutorialController extends Component {
             })
             .delay(0.5)
             .call(() => {
-                // By the time this recursive call happens, the nodes might be gone.
-                // We've added a check at the top of the function to handle this.
-                this.runAnimationLoop(startNode, endNode)
-            }) 
+                this.runAnimationLoop(startNode, endNode);
+            })
             .start();
     }
-    
+
     private getUIPosition(targetNode: Node): Vec3 | null {
-        const referenceNode = this.handNode?.parent;
-        
-        // --- ADDED SAFETY CHECK ---
-        if (!referenceNode || !targetNode.isValid) return null;
+        const animatedNode = this.getAnimatedHandNode();
+        if (!animatedNode || !targetNode.isValid) return null;
 
-        const refUIT = referenceNode.getComponent(UITransform);
-        const targetUIT = targetNode.getComponent(UITransform);
-        if (!refUIT || !targetUIT) return null;
+        const targetUIT = this.findFirstUITransform(targetNode);
+        if (!targetUIT) return null;
 
-        const worldPos = targetUIT.convertToWorldSpaceAR(v3(0, 0, 0));
-        return refUIT.convertToNodeSpaceAR(worldPos);
-    }
-    // FILE: /assets/Scripts/TutorialController.ts
-// Add this new function to your existing script. The rest of the file is unchanged.
+        const worldPos = targetNode.getWorldPosition(new Vec3());
+        const worldBounds = targetUIT.getBoundingBoxToWorld();
 
-public playClickTutorial(targetNode: Node): void {
-    if (!this.handNode || !this.idleHandSprite || !this.clickHandSprite || !targetNode?.isValid) return;
+       
 
-    this.handNode.active = true;
-    this.runClickAnimationLoop(targetNode);
-}
-
-private runClickAnimationLoop(targetNode: Node): void {
-    const handSprite = this.handNode?.getComponent(Sprite);
-    if (!handSprite || !targetNode.isValid) {
-        this.stopTutorial();
-        return;
+        return worldPos;
     }
 
-    const targetPosition = this.getUIPosition(targetNode);
-    if (!targetPosition) {
-        this.stopTutorial();
-        return;
+    public playClickTutorial(targetNode: Node): void {
+        const animatedNode = this.getAnimatedHandNode();
+        if (!animatedNode || !this.idleHandSprite || !this.clickHandSprite || !targetNode?.isValid) return;
+
+        const targetPosition = this.getUIPosition(targetNode);
+        if (!targetPosition) {
+            this.stopTutorial();
+            return;
+        }
+
+        animatedNode.active = true;
+        this.runClickAnimationLoop(targetPosition);
     }
 
-    handSprite.spriteFrame = this.idleHandSprite;
-    // Position hand slightly above and to the right of the target
-    this.handNode!.setPosition(targetPosition.x + 20, targetPosition.y + 30, targetPosition.z);
+    public playAtWorldPosition(worldPosition: Vec3): void {
+        const animatedNode = this.getAnimatedHandNode();
+        if (!animatedNode || !this.idleHandSprite || !this.clickHandSprite) return;
 
-    this.handTween = tween(this.handNode!)
-        .delay(0.5)
-        .call(() => { // "Press" down
-            handSprite.spriteFrame = this.clickHandSprite!;
-            tween(this.handNode).by(0.15, { position: new Vec3(0, -10, 0) }).start();
-        })
-        .delay(0.3)
-        .call(() => { // "Release"
-            handSprite.spriteFrame = this.idleHandSprite!;
-             tween(this.handNode).by(0.15, { position: new Vec3(0, 10, 0) }).start();
-        })
-        .delay(0.5)
-        .call(() => { // Loop the animation
-            this.runClickAnimationLoop(targetNode);
-        }) 
-        .start();
-}
+        animatedNode.active = true;
+        this.runClickAnimationLoop(worldPosition);
+    }
+
+    private runClickAnimationLoop(targetPosition: Vec3): void {
+        const animatedNode = this.getAnimatedHandNode();
+        const handSprite = this.getHandSprite();
+        if (!animatedNode || !handSprite) {
+            this.stopTutorial();
+            return;
+        }
+
+        handSprite.spriteFrame = this.idleHandSprite;
+        animatedNode.setWorldPosition(targetPosition);
+
+        this.handTween = tween(animatedNode)
+            .delay(0.5)
+            .call(() => {
+                handSprite.spriteFrame = this.clickHandSprite!;
+                tween(animatedNode).by(0.15, { position: new Vec3(0, -10, 0) }).start();
+            })
+            .delay(0.3)
+            .call(() => {
+                handSprite.spriteFrame = this.idleHandSprite!;
+                tween(animatedNode).by(0.15, { position: new Vec3(0, 10, 0) }).start();
+            })
+            .delay(0.5)
+            .call(() => {
+                this.runClickAnimationLoop(targetPosition);
+            })
+            .start();
+    }
 }
