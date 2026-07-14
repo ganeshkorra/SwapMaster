@@ -60,6 +60,7 @@ export class TutorialController extends Component {
 
         const animatedNode = this.getAnimatedHandNode();
         if (animatedNode) {
+            Tween.stopAllByTarget(animatedNode);
             animatedNode.active = false;
         }
     }
@@ -146,6 +147,7 @@ export class TutorialController extends Component {
         const animatedNode = this.getAnimatedHandNode();
         if (!animatedNode || !this.idleHandSprite || !this.clickHandSprite) return;
 
+        this.stopTutorial();
         animatedNode.active = true;
         this.runClickAnimationLoop(worldPosition);
     }
@@ -176,6 +178,7 @@ export class TutorialController extends Component {
         }
 
         handSprite.spriteFrame = this.idleHandSprite;
+        Tween.stopAllByTarget(animatedNode);
         animatedNode.setWorldPosition(targetPosition);
 
         this.handTween = tween(animatedNode)

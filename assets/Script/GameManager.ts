@@ -70,6 +70,9 @@ export class GameManager extends Component {
     private tutorialGuideBaseScale: Vec3 = Vec3.ONE.clone();
     private tutorialController: TutorialController | null = null;
     private tutorialTargetStage: number = 0;
+    private tutorialPlayToken: number = 0;
+    private lastHandledTapItem: Node | null = null;
+    private lastHandledTapTimeMs: number = 0;
     private idleHintActive: boolean = false;
     private idleHintTimer: number = 0;
     private idleHintSourceColumn: Node[] | null = null;
@@ -172,7 +175,15 @@ export class GameManager extends Component {
     }
 
     public onItemTap(tappedItem: Node) {
+        if (this.isDuplicateTap(tappedItem)) {
+            return;
+        }
+
         this.resetIdleHint();
+
+        if (this.gameEnded || this.isSwapping) {
+            return;
+        }
 
         const isFirstTutorialTap = this.tutorialTargetStage === 0 && this.isMatchingTutorialTarget(tappedItem, this.tutorialTargetNode);
         const isSecondTutorialTap = this.tutorialTargetStage === 1 && this.isMatchingTutorialTarget(tappedItem, this.tutorialTargetNode2);
@@ -186,17 +197,15 @@ export class GameManager extends Component {
             this.hideGuideLabel();
             this.startGameTimer();
         } else {
+            this.tutorialTargetStage = 2;
             this.stopTutorial();
+            this.hideGuideLabel();
         }
 
         // If this is the player's first real interaction (not the first tutorial tap),
         // start the game timer so `CHALLENGE_STARTED` is recorded.
         if (!this.timerStarted && !isFirstTutorialTap && !isSecondTutorialTap) {
             this.startGameTimer();
-        }
-
-        if (this.gameEnded || this.isSwapping) {
-            return;
         }
 
         if (this.fakeCardNode && tappedItem.parent === this.fakeCardNode) {
@@ -221,22 +230,41 @@ export class GameManager extends Component {
         if (isFirstTutorialTap) {
             this.scheduleOnce(() => {
                 this.startTutorial();
-            }, 0.7);
+            }, 0.72);
         }
     }
 
+    private isDuplicateTap(tappedItem: Node): boolean {
+        const now = Date.now();
+        const isDuplicate = this.lastHandledTapItem === tappedItem && now - this.lastHandledTapTimeMs < 120;
+        this.lastHandledTapItem = tappedItem;
+        this.lastHandledTapTimeMs = now;
+        return isDuplicate;
+    }
+
     private isMatchingTutorialTarget(tappedItem: Node, targetNode: Node | null): boolean {
-        return !!targetNode?.isValid && tappedItem === targetNode;
+        if (!targetNode?.isValid) {
+            return false;
+        }
+
+        if (tappedItem === targetNode) {
+            return true;
+        }
+
+        const targetColumn = this.boardColumns.find((column) => column.indexOf(targetNode) !== -1);
+        return !!targetColumn && targetColumn.indexOf(tappedItem) !== -1;
     }
 
     private resetIdleHint() {
         this.idleHintTimer = 0;
         this.idleHintStage = 0;
-        this.hideIdleHint();
+        if (this.idleHintActive) {
+            this.hideIdleHint();
+        }
     }
 
     private showIdleHint() {
-        if (this.idleHintActive || this.gameEnded || this.isSwapping) {
+        if (this.idleHintActive || this.gameEnded || this.isSwapping || this.tutorialTargetStage < 2) {
             return;
         }
 
@@ -1181,8 +1209,13 @@ export class GameManager extends Component {
             return;
         }
 
+        const playToken = ++this.tutorialPlayToken;
         tutorialRoot.active = true;
         this.scheduleOnce(() => {
+            if (playToken !== this.tutorialPlayToken || this.tutorialTargetStage >= 2 || this.idleHintActive) {
+                return;
+            }
+
             const controller = tutorialRoot.getComponent(TutorialController) || tutorialRoot.getComponentInChildren(TutorialController);
             this.tutorialController = controller;
 
@@ -1226,8 +1259,8 @@ export class GameManager extends Component {
         if (targetUIT) {
             const bounds = targetUIT.getBoundingBoxToWorld();
             if (bounds) {
-                worldPosition.x = bounds.x + bounds.width * 0.5+60;
-                worldPosition.y = bounds.y + bounds.height * 0.5 - 68;
+                worldPosition.x = bounds.x + bounds.width * 0.48 + 46;
+                worldPosition.y = bounds.y + bounds.height * 0.5 - 58;
             }
         }
 
@@ -1235,6 +1268,7 @@ export class GameManager extends Component {
     }
 
     private stopTutorial() {
+        this.tutorialPlayToken++;
         if (this.tutorialController) {
             this.tutorialController.stopTutorial();
         }
