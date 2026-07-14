@@ -10,13 +10,13 @@ export class CTAButtonHandler extends Component {
         type: CCString,
         tooltip: 'Default Android Play Store URL'
     })
-    public androidStoreUrl: string = "";
+    public androidStoreUrl: string = "https://play.google.com/store/apps/details?id=com.meemeegames.categorysort";
 
     @property({
         type: CCString,
         tooltip: 'Default iOS App Store URL'
     })
-    public iosStoreUrl: string = "https://apps.apple.com/us/app/swap-master-connect-puzzle/id6779528962";
+    public iosStoreUrl: string = "https://apps.apple.com/in/app/category-sort/id6758512068";
 
     private isMraidReady: boolean = false;
 

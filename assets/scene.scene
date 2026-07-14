@@ -5364,8 +5364,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 392,
-      "height": 395
+      "width": 451,
+      "height": 460
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -5395,7 +5395,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "dfef6c09-6e0d-45be-bb5f-821c338cd8b6@f9941",
+      "__uuid__": "d1b90f7b-93d4-43fb-af36-236bce3264e8@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -5479,8 +5479,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 470,
-      "height": 158
+      "width": 430,
+      "height": 114
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -5510,7 +5510,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "3cf3157a-84df-4331-8f3f-286491f615e2@f9941",
+      "__uuid__": "a0d3e068-e557-400e-8f27-9b1f9dafdb64@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -5538,8 +5538,8 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "androidStoreUrl": "https://apps.apple.com/us/app/swap-master-connect-puzzle/id6779528962",
-    "iosStoreUrl": "https://apps.apple.com/us/app/swap-master-connect-puzzle/id6779528962",
+    "androidStoreUrl": "https://play.google.com/store/apps/details?id=com.meemeegames.categorysort",
+    "iosStoreUrl": "https://apps.apple.com/in/app/category-sort/id6758512068",
     "_id": "49QMyOG/lH86aMQ+Oxe+0Y"
   },
   {
@@ -5604,7 +5604,7 @@
     "component": "",
     "_componentId": "794ddRKdJhLfq0Iu9VVFrJy",
     "handler": "onStoreButtonClicked",
-    "customEventData": "https://apps.apple.com/us/app/swap-master-connect-puzzle/id6779528962"
+    "customEventData": "https://play.google.com/store/apps/details?id=com.meemeegames.categorysort"
   },
   {
     "__type__": "cc.UITransform",

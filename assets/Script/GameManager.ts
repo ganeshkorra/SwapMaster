@@ -1135,7 +1135,14 @@ export class GameManager extends Component {
             Analytics.instance.dispatchEvent(analyticsEvents.ENDCARD_SHOWN);
         }
 
-        this.triggerCtaForEndScreen(result);
+        // On win, delay showing CTA for a short moment for better UX
+        if (result === 'win') {
+            this.scheduleOnce(() => {
+                this.triggerCtaForEndScreen(result);
+            }, 1.5);
+        } else {
+            this.triggerCtaForEndScreen(result);
+        }
     }
 
     /**
