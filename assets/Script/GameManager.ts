@@ -922,17 +922,20 @@ export class GameManager extends Component {
 
     private drawStarParticle(particle: Node, color: Color) {
         const graphics = particle.getComponent(Graphics);
-        if (!graphics) {
+        const transform = particle.getComponent(UITransform);
+        if (!graphics || !transform) {
             return;
         }
 
-        const outer = 9;
-        const inner = 3.5;
+        const outer = Math.min(transform.contentSize.width, transform.contentSize.height) * 0.48;
+        const inner = outer * 0.38;
         graphics.clear();
         graphics.fillColor = color;
-        for (let i = 0; i < 8; i++) {
+        graphics.strokeColor = new Color(255, 255, 255, 210);
+        graphics.lineWidth = 1.5;
+        for (let i = 0; i < 10; i++) {
             const radius = i % 2 === 0 ? outer : inner;
-            const angle = Math.PI * 0.25 * i - Math.PI * 0.5;
+            const angle = Math.PI * 0.2 * i - Math.PI * 0.5;
             const x = Math.cos(angle) * radius;
             const y = Math.sin(angle) * radius;
             if (i === 0) {
@@ -943,6 +946,48 @@ export class GameManager extends Component {
         }
         graphics.close();
         graphics.fill();
+        graphics.stroke();
+    }
+
+    private spawnColumnGlowPulse(parent: Node, parentTransform: UITransform, bounds: { minX: number; maxX: number; minY: number; maxY: number }, z: number) {
+        const pulse = new Node('columnSparkPulse');
+        const width = bounds.maxX - bounds.minX + 24;
+        const height = bounds.maxY - bounds.minY + 24;
+        pulse.addComponent(UITransform).setContentSize(width, height);
+        pulse.addComponent(Graphics);
+        pulse.addComponent(UIOpacity);
+        pulse.setParent(parent);
+        pulse.setSiblingIndex(parent.children.length - 1);
+
+        const centerWorld = new Vec3((bounds.minX + bounds.maxX) * 0.5, (bounds.minY + bounds.maxY) * 0.5, z);
+        pulse.setPosition(parentTransform.convertToNodeSpaceAR(centerWorld));
+        pulse.setScale(new Vec3(0.92, 0.92, 1));
+
+        const graphics = pulse.getComponent(Graphics);
+        const opacity = pulse.getComponent(UIOpacity);
+        if (graphics) {
+            const radius = Math.min(24, width * 0.18, height * 0.06);
+            graphics.clear();
+            graphics.lineWidth = 8;
+            graphics.strokeColor = new Color(255, 230, 80, 235);
+            graphics.roundRect(-width * 0.5, -height * 0.5, width, height, radius);
+            graphics.stroke();
+        }
+        if (opacity) {
+            opacity.opacity = 245;
+        }
+
+        tween(pulse)
+            .to(0.28, { scale: new Vec3(1.08, 1.08, 1) }, { easing: easing.quadOut })
+            .delay(0.04)
+            .call(() => pulse.destroy())
+            .start();
+        if (opacity) {
+            tween(opacity)
+                .delay(0.08)
+                .to(0.24, { opacity: 0 })
+                .start();
+        }
     }
 
     private spawnColumnStarParticles(items: Node[]) {
@@ -960,49 +1005,59 @@ export class GameManager extends Component {
         const parentScale = parent.getWorldScale(new Vec3());
         const centerX = (bounds.minX + bounds.maxX) * 0.5;
         const centerY = (bounds.minY + bounds.maxY) * 0.5;
-        const particleCount = 18;
+        const particleCount = 42;
+        const z = items[0].getWorldPosition(new Vec3()).z;
+        this.spawnColumnGlowPulse(parent, parentTransform, bounds, z);
 
         for (let i = 0; i < particleCount; i++) {
             const particle = new Node('columnStarParticle');
-            particle.addComponent(UITransform).setContentSize(24, 24);
+            const particleSize = 26 + Math.random() * 20;
+            particle.addComponent(UITransform).setContentSize(particleSize, particleSize);
             particle.addComponent(Graphics);
             particle.addComponent(UIOpacity);
             particle.setParent(parent);
             particle.setSiblingIndex(parent.children.length - 1);
 
             const side = i % 4;
-            const edgeX = side === 0 ? bounds.minX : side === 1 ? bounds.maxX : bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
-            const edgeY = side === 2 ? bounds.minY : side === 3 ? bounds.maxY : bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
-            const startLocal = parentTransform.convertToNodeSpaceAR(new Vec3(edgeX, edgeY, items[0].getWorldPosition(new Vec3()).z));
-            const directionX = (edgeX - centerX) / Math.max(Math.abs(edgeX - centerX), 1);
-            const directionY = (edgeY - centerY) / Math.max(Math.abs(edgeY - centerY), 1);
-            const drift = 16 + Math.random() * 14;
+            const fromCenter = i % 3 === 0;
+            const edgeX = fromCenter ? centerX : side === 0 ? bounds.minX : side === 1 ? bounds.maxX : bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
+            const edgeY = fromCenter ? centerY : side === 2 ? bounds.minY : side === 3 ? bounds.maxY : bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
+            const startLocal = parentTransform.convertToNodeSpaceAR(new Vec3(edgeX, edgeY, z));
+            const angle = fromCenter ? (Math.PI * 2 * i) / particleCount : Math.atan2(edgeY - centerY, edgeX - centerX);
+            const directionX = Math.cos(angle);
+            const directionY = Math.sin(angle);
+            const drift = 44 + Math.random() * 42;
             const endLocal = new Vec3(
                 startLocal.x + directionX * drift / Math.max(parentScale.x, 0.01),
                 startLocal.y + directionY * drift / Math.max(parentScale.y, 0.01),
                 startLocal.z
             );
             const opacity = particle.getComponent(UIOpacity);
-            const scale = 0.45 + Math.random() * 0.35;
+            const scale = 0.7 + Math.random() * 0.55;
+            const color = i % 5 === 0
+                ? new Color(255, 255, 255, 255)
+                : i % 2 === 0
+                    ? new Color(255, 241, 96, 255)
+                    : new Color(255, 184, 42, 255);
 
             particle.setPosition(startLocal);
-            particle.setScale(new Vec3(0.1, 0.1, 1));
+            particle.setScale(new Vec3(0.05, 0.05, 1));
             if (opacity) {
                 opacity.opacity = 255;
             }
-            this.drawStarParticle(particle, i % 3 === 0 ? new Color(255, 255, 255, 245) : new Color(255, 220, 64, 255));
+            this.drawStarParticle(particle, color);
 
             tween(particle)
-                .delay(Math.random() * 0.05)
-                .to(0.11, { scale: new Vec3(scale, scale, 1), position: endLocal }, { easing: easing.quadOut })
-                .delay(0.08)
-                .to(0.14, { scale: new Vec3(0.05, 0.05, 1) }, { easing: easing.quadIn })
+                .delay(Math.random() * 0.08)
+                .to(0.2, { scale: new Vec3(scale, scale, 1), position: endLocal }, { easing: easing.quadOut })
+                .delay(0.12)
+                .to(0.2, { scale: new Vec3(0.12, 0.12, 1) }, { easing: easing.quadIn })
                 .call(() => particle.destroy())
                 .start();
             if (opacity) {
                 tween(opacity)
-                    .delay(0.16)
-                    .to(0.14, { opacity: 0 })
+                    .delay(0.2)
+                    .to(0.28, { opacity: 0 })
                     .start();
             }
         }
