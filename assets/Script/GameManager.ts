@@ -26,6 +26,8 @@ export class GameManager extends Component {
 
     private boardColumns: Node[][] = [];
     private categoryLookup: Map<Node, number> = new Map();
+    private columnDownArrows: Map<Node[], Node> = new Map();
+    private columnRightMarks: Map<Node[], Node> = new Map();
     private completedColumns: Set<Node[]> = new Set();
     private columnMatchMarks: Map<Node[], Node> = new Map();
     private tapHandlersRegistered: Set<Node> = new Set();
@@ -42,6 +44,9 @@ export class GameManager extends Component {
 
     @property(Label)
     public tutorialGuideLabel: Label | null = null;
+
+    @property({ type: [Node], tooltip: 'Down arrow nodes ordered from left to right below the board columns.' })
+    public downArrowNodes: Node[] = [];
 
     @property(Node)
     public tutorialNode: Node | null = null;
@@ -86,6 +91,7 @@ export class GameManager extends Component {
         this.initializeColumns();
         this.buildCategoryLookup();
         this.initializeCategoryLabels();
+        this.initializeDownArrows();
         this.setupTapHandlers();
         this.updateMatchedColumns();
         this.remainingTime = this.gameDurationSeconds;
@@ -546,6 +552,148 @@ export class GameManager extends Component {
         });
     }
 
+    private initializeDownArrows() {
+        this.columnDownArrows.clear();
+
+        const arrows = this.getDownArrowNodes();
+        arrows.forEach((arrow) => {
+            arrow.active = true;
+        });
+
+        if (!arrows.length || !this.boardColumns.length) {
+            return;
+        }
+
+        const sortedColumns = this.boardColumns
+            .slice()
+            .sort((a, b) => this.getColumnCenterWorldX(a) - this.getColumnCenterWorldX(b));
+
+        const sortedArrows = arrows
+            .slice()
+            .sort((a, b) => a.getWorldPosition(new Vec3()).x - b.getWorldPosition(new Vec3()).x);
+
+        sortedColumns.forEach((column, index) => {
+            const arrow = sortedArrows[index];
+            if (arrow) {
+                this.columnDownArrows.set(column, arrow);
+            }
+        });
+    }
+
+    private getDownArrowNodes(): Node[] {
+        if (this.downArrowNodes.length) {
+            return this.downArrowNodes.filter((arrow) => !!arrow);
+        }
+
+        const arrows: Node[] = [];
+        this.collectNodesByName(this.node.scene || this.node, 'Down arrow', arrows);
+        return arrows;
+    }
+
+    private collectNodesByName(root: Node, nodeName: string, matches: Node[]) {
+        if (root.name === nodeName) {
+            matches.push(root);
+        }
+
+        root.children.forEach((child) => this.collectNodesByName(child, nodeName, matches));
+    }
+
+    private hideColumnDownArrow(column: Node[]) {
+        const arrow = this.columnDownArrows.get(column);
+        if (arrow) {
+            arrow.active = false;
+        }
+    }
+
+    private showColumnRightMark(column: Node[]) {
+        const markNode = this.getOrCreateColumnRightMark(column);
+        if (!markNode) {
+            return;
+        }
+
+        Tween.stopAllByTarget(markNode);
+        markNode.active = true;
+        markNode.setScale(new Vec3(1, 1, 1));
+        const opacity = markNode.getComponent(UIOpacity);
+        if (opacity) {
+            opacity.opacity = 255;
+        }
+
+        this.layoutColumnRightMark(markNode, column);
+        this.drawColumnRightMark(markNode, new Color(255, 222, 79, 255));
+        tween(markNode)
+            .to(0.14, { scale: Vec3.ONE }, { easing: easing.quadOut })
+            .start();
+    }
+
+    private getOrCreateColumnRightMark(column: Node[]): Node | null {
+        let markNode = this.columnRightMarks.get(column);
+        if (markNode?.isValid) {
+            return markNode;
+        }
+
+        const arrow = this.columnDownArrows.get(column);
+        const parent = arrow?.parent || column[0]?.parent;
+        if (!parent) {
+            return null;
+        }
+
+        markNode = new Node('columnRightMark');
+        markNode.addComponent(UITransform).setContentSize(106, 82);
+        markNode.addComponent(Graphics);
+        markNode.addComponent(UIOpacity);
+        markNode.setParent(parent);
+        markNode.setSiblingIndex(parent.children.length - 1);
+        markNode.active = false;
+        this.columnRightMarks.set(column, markNode);
+        return markNode;
+    }
+
+    private layoutColumnRightMark(markNode: Node, column: Node[]) {
+        const parentTransform = markNode.parent?.getComponent(UITransform);
+        if (!parentTransform) {
+            return;
+        }
+
+        const arrow = this.columnDownArrows.get(column);
+        if (arrow?.isValid) {
+            const arrowWorldPosition = arrow.getWorldPosition(new Vec3());
+            markNode.setPosition(parentTransform.convertToNodeSpaceAR(arrowWorldPosition));
+            return;
+        }
+
+        const items = column.slice(0, this.itemsPerColumn);
+        const bounds = this.getColumnWorldBounds(items.length ? items : column);
+        if (!bounds) {
+            return;
+        }
+
+        const centerWorld = new Vec3(
+            this.getColumnCenterWorldX(column),
+            bounds.minY - 46,
+            column[0]?.getWorldPosition(new Vec3()).z || 0
+        );
+        markNode.setPosition(parentTransform.convertToNodeSpaceAR(centerWorld));
+    }
+
+    private drawColumnRightMark(markNode: Node, color: Color) {
+        const graphics = markNode.getComponent(Graphics);
+        const transform = markNode.getComponent(UITransform);
+        if (!graphics || !transform) {
+            return;
+        }
+
+        const width = transform.contentSize.width;
+        const height = transform.contentSize.height;
+        graphics.clear();
+        graphics.lineWidth = 20;
+        graphics.strokeColor = color;
+        graphics.moveTo(-width * 0.28, -height * 0.02);
+        graphics.lineTo(-width * 0.08, -height * 0.24);
+        graphics.lineTo(width * 0.32, height * 0.24);
+        graphics.stroke();
+    }
+
     private getColumnCenterWorldX(column: Node[]): number {
         const items = column.slice(0, this.itemsPerColumn);
         const bounds = this.getColumnWorldBounds(items.length ? items : column);
@@ -675,8 +823,12 @@ export class GameManager extends Component {
         }
         const items = column.slice(0, this.itemsPerColumn);
         const categoryId = this.getCategoryId(items[0]);
+        this.hideColumnDownArrow(column);
+        this.showColumnRightMark(column);
         this.setColumnMatchedVisual(items, true, column, false);
-        this.displayColumnCategoryLabel(column, categoryId);
+        this.scheduleOnce(() => {
+            this.displayColumnCategoryLabel(column, categoryId);
+        }, 0.22);
         // Add to completed set
         this.completedColumns.add(column);
 
@@ -760,9 +912,6 @@ export class GameManager extends Component {
         this.drawColumnMatchMark(markNode, new Color(255, 222, 79, 255));
         tween(markNode)
             .delay(0.22)
-            .call(() => {
-                this.drawColumnMatchMark(markNode, new Color(62, 112, 202, 255));
-            })
             .call(() => {
                 if (opacity) {
                     opacity.opacity = 255;
@@ -875,7 +1024,7 @@ export class GameManager extends Component {
                     if (opacity) {
                         opacity.opacity = 255;
                     }
-                    this.drawColumnMatchMark(markNode, new Color(62, 112, 202, 255));
+                    this.drawColumnMatchMark(markNode, new Color(255, 222, 79, 255));
                 } else {
                     this.playColumnMatchMarkAnimation(markNode);
                 }
