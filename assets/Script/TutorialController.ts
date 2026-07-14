@@ -150,6 +150,23 @@ export class TutorialController extends Component {
         this.runClickAnimationLoop(worldPosition);
     }
 
+    /**
+     * Immediately set the animated hand node's world position. Useful for resets
+     * before re-activating the tutorial so the hand doesn't briefly appear at
+     * an old location.
+     */
+    public setHandWorldPosition(worldPosition: Vec3): void {
+        const animatedNode = this.getAnimatedHandNode();
+        if (!animatedNode) return;
+        // Stop any tweens affecting the node to avoid conflicts
+        try {
+            Tween.stopAllByTarget(animatedNode);
+        } catch (e) {
+            // If Tween helper isn't available on this object, ignore.
+        }
+        animatedNode.setWorldPosition(worldPosition);
+    }
+
     private runClickAnimationLoop(targetPosition: Vec3): void {
         const animatedNode = this.getAnimatedHandNode();
         const handSprite = this.getHandSprite();

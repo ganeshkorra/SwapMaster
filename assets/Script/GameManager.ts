@@ -309,9 +309,13 @@ export class GameManager extends Component {
             // Deactivate to reset hand state completely. Stop any existing tutorial
             // animation so tweens don't persist across re-activation.
             const existingController = tutorialRoot?.getComponent(TutorialController) || tutorialRoot?.getComponentInChildren(TutorialController);
-            if (existingController) {
-                existingController.stopTutorial();
-            }
+                if (existingController) {
+                    existingController.stopTutorial();
+                    // Place the hand immediately at the target so it doesn't flash at the old position
+                    if (typeof existingController.setHandWorldPosition === 'function') {
+                        existingController.setHandWorldPosition(handPosition);
+                    }
+                }
 
             if (tutorialRoot.active) {
                 tutorialRoot.active = false;
