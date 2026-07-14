@@ -36,11 +36,14 @@ export class Analytics extends Component {
 
     onLoad() {
         Analytics._instance = this;
-        
+
         // Fire LOADING event once on initialization
         if (!Analytics.hasInitialized) {
             Analytics.hasInitialized = true;
             this.dispatchEvent(analyticsEvents.LOADING);
+            this.scheduleOnce(() => {
+                this.dispatchEvent(analyticsEvents.LOADED);
+            }, 0.01);
         }
     }
 

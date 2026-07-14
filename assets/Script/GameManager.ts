@@ -75,6 +75,9 @@ export class GameManager extends Component {
     private analyticsPass25Fired: boolean = false;
     private analyticsPass50Fired: boolean = false;
     private analyticsPass75Fired: boolean = false;
+    private analyticsSolvedFired: boolean = false;
+    private analyticsFailedFired: boolean = false;
+    private analyticsEndcardShownFired: boolean = false;
 
     start() {
         this.initializeColumns();
@@ -86,6 +89,11 @@ export class GameManager extends Component {
         this.hideCtaNode();
         this.showGuideLabel();
         this.startTutorial();
+        // Fire DISPLAYED on initial load so analytics records that the playable is ready
+        if (!this.analyticsDisplayedFired && Analytics.instance) {
+            this.analyticsDisplayedFired = true;
+            Analytics.instance.dispatchEvent(analyticsEvents.DISPLAYED);
+        }
         this.idleHintTimer = 0;
         this.idleHintActive = false;
         this.idleHintSourceColumn = null;
@@ -172,6 +180,12 @@ export class GameManager extends Component {
             this.startGameTimer();
         } else {
             this.stopTutorial();
+        }
+
+        // If this is the player's first real interaction (not the first tutorial tap),
+        // start the game timer so `CHALLENGE_STARTED` is recorded.
+        if (!this.timerStarted && !isFirstTutorialTap && !isSecondTutorialTap) {
+            this.startGameTimer();
         }
 
         if (this.gameEnded || this.isSwapping) {
@@ -292,7 +306,13 @@ export class GameManager extends Component {
         const handPosition = this.getIdleHintHandWorldPosition(column);
         if (handPosition) {
             const tutorialRoot = this.tutorialNode || this.node;
-            // Deactivate to reset hand state completely
+            // Deactivate to reset hand state completely. Stop any existing tutorial
+            // animation so tweens don't persist across re-activation.
+            const existingController = tutorialRoot?.getComponent(TutorialController) || tutorialRoot?.getComponentInChildren(TutorialController);
+            if (existingController) {
+                existingController.stopTutorial();
+            }
+
             if (tutorialRoot.active) {
                 tutorialRoot.active = false;
                 // Small delay to ensure state resets before reactivating
@@ -305,7 +325,7 @@ export class GameManager extends Component {
                     }
                 }, 0.02);
             } else {
-                const controller = tutorialRoot?.getComponent(TutorialController) || tutorialRoot?.getComponentInChildren(TutorialController);
+                const controller = existingController || (tutorialRoot?.getComponent(TutorialController) || tutorialRoot?.getComponentInChildren(TutorialController));
                 this.tutorialController = controller;
                 if (controller) {
                     tutorialRoot.active = true;
@@ -616,7 +636,13 @@ export class GameManager extends Component {
         }
         const items = column.slice(0, this.itemsPerColumn);
         this.setColumnMatchedVisual(items, true, column, false);
+        // If this is the first completed column, fire the 25% progress analytic
+        const wasFirstCompletion = this.completedColumns.size === 0;
         this.completedColumns.add(column);
+        if (wasFirstCompletion && !this.analyticsPass25Fired && Analytics.instance) {
+            this.analyticsPass25Fired = true;
+            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_25);
+        }
     }
 
     private layoutColumnMatchMark(markNode: Node, items: Node[]) {
@@ -1084,8 +1110,21 @@ export class GameManager extends Component {
 
         if (result === 'win') {
             console.log('Game over: you won.');
+            if (!this.analyticsSolvedFired && Analytics.instance) {
+                this.analyticsSolvedFired = true;
+                Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_SOLVED);
+            }
         } else {
             console.log('Game over: time is up.');
+            if (!this.analyticsFailedFired && Analytics.instance) {
+                this.analyticsFailedFired = true;
+                Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_FAILED);
+            }
+        }
+
+        if (!this.analyticsEndcardShownFired && Analytics.instance) {
+            this.analyticsEndcardShownFired = true;
+            Analytics.instance.dispatchEvent(analyticsEvents.ENDCARD_SHOWN);
         }
 
         this.triggerCtaForEndScreen(result);

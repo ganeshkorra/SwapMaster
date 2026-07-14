@@ -112,8 +112,19 @@ export class TutorialController extends Component {
         const worldPos = targetNode.getWorldPosition(new Vec3());
         const worldBounds = targetUIT.getBoundingBoxToWorld();
 
-       
+        // Convert world position to the animated node's parent local space if possible.
+        // `runAnimationLoop` uses `setPosition` (local) so returning world coords
+        // makes the hand appear in the wrong place. When the animated node has
+        // a parent with a UITransform, convert to that parent's local space.
+        const parent = animatedNode.parent;
+        if (parent) {
+            const parentTransform = parent.getComponent(UITransform);
+            if (parentTransform) {
+                return parentTransform.convertToNodeSpaceAR(worldPos);
+            }
+        }
 
+        // Fallback: return world position for callers that expect world coords.
         return worldPos;
     }
 
