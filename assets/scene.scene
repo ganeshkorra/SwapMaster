@@ -1845,8 +1845,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 433,
-      "height": 495
+      "width": 431,
+      "height": 494
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2067,8 +2067,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 439,
-      "height": 486
+      "width": 434,
+      "height": 483
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2289,8 +2289,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 371,
-      "height": 464
+      "width": 368,
+      "height": 462
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2511,7 +2511,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 191,
+      "width": 190,
       "height": 235
     },
     "_anchorPoint": {
@@ -2733,8 +2733,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 368,
-      "height": 496
+      "width": 364,
+      "height": 493
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2955,8 +2955,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 357,
-      "height": 463
+      "width": 355,
+      "height": 462
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -3177,7 +3177,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 435,
+      "width": 433,
       "height": 493
     },
     "_anchorPoint": {
@@ -3399,8 +3399,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 194,
-      "height": 235
+      "width": 192,
+      "height": 234
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -3621,7 +3621,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 357,
+      "width": 355,
       "height": 462
     },
     "_anchorPoint": {
@@ -3843,8 +3843,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 385,
-      "height": 492
+      "width": 378,
+      "height": 491
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -4065,8 +4065,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 365,
-      "height": 463
+      "width": 363,
+      "height": 462
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -4287,8 +4287,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 210,
-      "height": 235
+      "width": 206,
+      "height": 234
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -4509,8 +4509,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 191,
-      "height": 238
+      "width": 189,
+      "height": 237
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -4731,8 +4731,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 355,
-      "height": 495
+      "width": 353,
+      "height": 494
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -4953,7 +4953,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 439,
+      "width": 437,
       "height": 492
     },
     "_anchorPoint": {
@@ -5175,8 +5175,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 416,
-      "height": 496
+      "width": 414,
+      "height": 494
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -6923,7 +6923,7 @@
       }
     ],
     "itemsPerColumn": 4,
-    "gameDurationSeconds": 35,
+    "gameDurationSeconds": 60,
     "countdownLabel": null,
     "tutorialGuideLabel": {
       "__id__": 144
