@@ -63,7 +63,9 @@ export class GameManager extends Component {
     private tutorialTargetStage: number = 0;
     private idleHintActive: boolean = false;
     private idleHintTimer: number = 0;
-    private idleHintColumn: Node[] | null = null;
+    private idleHintSourceColumn: Node[] | null = null;
+    private idleHintDestinationColumn: Node[] | null = null;
+    private idleHintStage: number = 0; // 0 = no hint, 1 = showing source, 2 = showing destination
     private idleHintOriginalScales: Map<Node, Vec3> = new Map();
 
     start() {
@@ -78,7 +80,9 @@ export class GameManager extends Component {
         this.startTutorial();
         this.idleHintTimer = 0;
         this.idleHintActive = false;
-        this.idleHintColumn = null;
+        this.idleHintSourceColumn = null;
+        this.idleHintDestinationColumn = null;
+        this.idleHintStage = 0;
         this.idleHintOriginalScales.clear();
     }
 
@@ -202,6 +206,7 @@ export class GameManager extends Component {
 
     private resetIdleHint() {
         this.idleHintTimer = 0;
+        this.idleHintStage = 0;
         this.hideIdleHint();
     }
 
@@ -210,57 +215,131 @@ export class GameManager extends Component {
             return;
         }
 
-        const hintColumn = this.getBestIdleHintColumn();
-        if (!hintColumn?.length) {
+        const hint = this.getBestIdleHintColumns();
+        if (!hint || !hint.source?.length || !hint.destination?.length) {
             return;
         }
 
-        this.idleHintColumn = hintColumn;
+        this.idleHintSourceColumn = hint.source;
+        this.idleHintDestinationColumn = hint.destination;
         this.idleHintActive = true;
-        this.idleHintOriginalScales.clear();
-
-        const handPosition = this.getIdleHintHandWorldPosition(hintColumn);
-        if (handPosition) {
-            const tutorialRoot = this.tutorialNode || this.node;
-            const controller = tutorialRoot?.getComponent(TutorialController) || tutorialRoot?.getComponentInChildren(TutorialController);
-            this.tutorialController = controller;
-            if (controller) {
-                tutorialRoot.active = true;
-                controller.playAtWorldPosition(handPosition);
-            }
+        this.idleHintTimer = 0; // Reset timer for stage transitions
+        
+        // Check if this is an instant-win (source === destination)
+        if (hint.source === hint.destination) {
+            // Instant win: just show the destination column, no multi-stage hint needed
+            this.idleHintStage = 0; // No transition needed
+            this.displayHintColumn(this.idleHintDestinationColumn, false);
+        } else {
+            // Multi-stage hint: show destination first, then source
+            this.idleHintStage = 1; // Start with destination column (the one with 2+ matching cards)
+            this.displayHintColumn(this.idleHintDestinationColumn, false);
         }
+    }
 
-        hintColumn.forEach((item) => {
-            const currentScale = item.getScale().clone();
-            this.idleHintOriginalScales.set(item, currentScale);
+    private displayHintColumn(column: Node[], isSource: boolean) {
+        const items = column.slice(0, this.itemsPerColumn);
+
+        // Animate cards scaling in/out for attention
+        items.forEach((item) => {
             Tween.stopAllByTarget(item);
+            const baseScale = item.getScale().clone();
             tween(item)
                 .repeatForever(
                     tween()
-                        .to(0.35, { scale: new Vec3(currentScale.x * 1.01, currentScale.y * 1.01, currentScale.z) }, { easing: easing.quadOut })
-                        .to(0.35, { scale: currentScale }, { easing: easing.quadIn })
+                        .to(0.4, { scale: new Vec3(baseScale.x * 1.01, baseScale.y * 1.01, baseScale.z) }, { easing: easing.quadOut })
+                        .to(0.4, { scale: baseScale }, { easing: easing.quadIn })
                 )
                 .start();
         });
+
+        // Show yellow column highlight
+        let markNode = this.getColumnMatchMarkNode(column);
+        if (!markNode) {
+            console.log('GameManager: Creating new mark node for idle hint');
+            markNode = this.createColumnMatchMark(column, items);
+        } else {
+            // Clean up any previous animation on mark node
+            Tween.stopAllByTarget(markNode);
+            console.log('GameManager: Reusing existing mark node, cleaned up tweens');
+        }
+        if (markNode) {
+            markNode.active = true;
+            this.layoutColumnMatchMark(markNode, items);
+            this.drawColumnMatchMark(markNode, new Color(255, 222, 79, 255)); // Bright yellow
+
+            // Pulse the highlight border for attention
+            Tween.stopAllByTarget(markNode);
+            const baseScale = markNode.getScale().clone();
+            tween(markNode)
+                .repeatForever(
+                    tween()
+                        .to(0.4, { scale: new Vec3(baseScale.x * 1.01, baseScale.y * 1.01, baseScale.z) }, { easing: easing.quadOut })
+                        .to(0.4, { scale: baseScale }, { easing: easing.quadIn })
+                )
+                .start();
+        }
+
+        // Show hand pointing at the column
+        const handPosition = this.getIdleHintHandWorldPosition(column);
+        if (handPosition) {
+            const tutorialRoot = this.tutorialNode || this.node;
+            // Deactivate to reset hand state completely
+            if (tutorialRoot.active) {
+                tutorialRoot.active = false;
+                // Small delay to ensure state resets before reactivating
+                this.scheduleOnce(() => {
+                    const controller = tutorialRoot?.getComponent(TutorialController) || tutorialRoot?.getComponentInChildren(TutorialController);
+                    this.tutorialController = controller;
+                    if (controller) {
+                        tutorialRoot.active = true;
+                        controller.playAtWorldPosition(handPosition);
+                    }
+                }, 0.02);
+            } else {
+                const controller = tutorialRoot?.getComponent(TutorialController) || tutorialRoot?.getComponentInChildren(TutorialController);
+                this.tutorialController = controller;
+                if (controller) {
+                    tutorialRoot.active = true;
+                    controller.playAtWorldPosition(handPosition);
+                }
+            }
+        }
     }
 
     private hideIdleHint() {
-        if (!this.idleHintColumn?.length) {
-            this.idleHintActive = false;
-            this.idleHintOriginalScales.clear();
-            return;
+        // Stop card scale animations for destination column
+        if (this.idleHintDestinationColumn?.length) {
+            this.idleHintDestinationColumn.forEach((item) => {
+                Tween.stopAllByTarget(item);
+                item.setScale(item.getScale()); // Reset to current scale
+            });
+
+            const destMarkNode = this.getColumnMatchMarkNode(this.idleHintDestinationColumn);
+            if (destMarkNode) {
+                Tween.stopAllByTarget(destMarkNode);
+                destMarkNode.active = false;
+            }
         }
 
-        this.idleHintColumn.forEach((item) => {
-            Tween.stopAllByTarget(item);
-            const originalScale = this.idleHintOriginalScales.get(item);
-            if (originalScale) {
-                item.setScale(originalScale);
+        // Stop card scale animations for source column
+        if (this.idleHintSourceColumn?.length) {
+            this.idleHintSourceColumn.forEach((item) => {
+                Tween.stopAllByTarget(item);
+                item.setScale(item.getScale()); // Reset to current scale
+            });
+
+            const sourceMarkNode = this.getColumnMatchMarkNode(this.idleHintSourceColumn);
+            if (sourceMarkNode) {
+                Tween.stopAllByTarget(sourceMarkNode);
+                sourceMarkNode.active = false;
             }
-        });
+        }
 
         this.idleHintActive = false;
-        this.idleHintColumn = null;
+        this.idleHintStage = 0;
+        this.idleHintSourceColumn = null;
+        this.idleHintDestinationColumn = null;
         this.idleHintOriginalScales.clear();
 
         if (this.tutorialController) {
@@ -305,19 +384,53 @@ export class GameManager extends Component {
         return new Vec3(centerX + 70, centerY - 50, referencePosition.z);
     }
 
-    private getBestIdleHintColumn(): Node[] | null {
-        if (!this.fakeCardNode || !this.fakeCardNode.children.length) {
-            return null;
+    private getBestIdleHintColumns(): { source: Node[], destination: Node[] } | null {
+        // SMART HINT: First check if the swap card can instantly complete a column
+        if (this.fakeCardNode && this.fakeCardNode.children.length) {
+            const swapCard = this.fakeCardNode.children[0];
+            const swapCardCategoryId = this.getCategoryId(swapCard);
+            if (swapCardCategoryId !== -1) {
+
+                // Find a column with 2-3 items matching the swap card's category
+                // This is an instant-win scenario - tapping this column = guaranteed match
+                let instantWinColumn: Node[] | null = null;
+
+                for (let column of this.boardColumns) {
+                    if (this.completedColumns.has(column)) {
+                        continue;
+                    }
+
+                    const items = column.slice(0, this.itemsPerColumn);
+                    if (items.length < this.itemsPerColumn) {
+                        continue;
+                    }
+
+                    // Count how many items match the swap card's category
+                    const matchingCount = items.filter((item) => this.getCategoryId(item) === swapCardCategoryId).length;
+
+                    // If this column has 2-3 matching items, it's an instant win
+                    if (matchingCount >= 2 && matchingCount < this.itemsPerColumn) {
+                        instantWinColumn = column;
+                        break; // Found the best hint - stop searching
+                    }
+                }
+
+                // If we found an instant-win column, return it as the destination
+                // The swap card itself is the "source"
+                if (instantWinColumn) {
+                    return {
+                        source: instantWinColumn, // Placeholder (swap card is already in slot)
+                        destination: instantWinColumn // The ONLY column to tap for instant win
+                    };
+                }
+            }
         }
 
-        const swapCard = this.fakeCardNode.children[0];
-        const swapCategoryId = this.getCategoryId(swapCard);
-        if (swapCategoryId === -1) {
-            return null;
-        }
-
-        let bestColumn: Node[] | null = null;
-        let bestScore = -1;
+        // FALLBACK: If no instant-win found, use the old logic
+        // Find the column with the most cards of the same category (destination)
+        let bestDestinationColumn: Node[] | null = null;
+        let bestCategoryId = -1;
+        let bestMatchCount = 0;
 
         this.boardColumns.forEach((column) => {
             if (this.completedColumns.has(column)) {
@@ -329,23 +442,52 @@ export class GameManager extends Component {
                 return;
             }
 
-            const existingItems = items.slice(0, this.itemsPerColumn - 1);
-            if (!existingItems.length) {
-                return;
-            }
+            const firstCategoryId = this.getCategoryId(items[0]);
+            const matchCount = items.filter((item) => this.getCategoryId(item) === firstCategoryId).length;
 
-            const firstCategoryId = this.getCategoryId(existingItems[0]);
-            const sameCategoryCount = existingItems.filter((item) => this.getCategoryId(item) === firstCategoryId).length;
-            const canCompleteWithSwap = firstCategoryId !== -1 && firstCategoryId === swapCategoryId && sameCategoryCount === existingItems.length;
-            const score = canCompleteWithSwap ? 100 : sameCategoryCount;
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestColumn = column;
+            // We want columns with 2-3 matching items (not complete, not empty)
+            if (matchCount >= 2 && matchCount < this.itemsPerColumn && matchCount > bestMatchCount) {
+                bestMatchCount = matchCount;
+                bestDestinationColumn = column;
+                bestCategoryId = firstCategoryId;
             }
         });
 
-        return bestScore > 0 ? bestColumn : null;
+        // If no good destination found, return null
+        if (!bestDestinationColumn || bestCategoryId === -1 || bestMatchCount < 2) {
+            return null;
+        }
+
+        // Now find another card of the same category in a DIFFERENT column (source - where to tap)
+        let sourceColumn: Node[] | null = null;
+
+        for (let column of this.boardColumns) {
+            if (column === bestDestinationColumn || this.completedColumns.has(column)) {
+                continue;
+            }
+
+            const items = column.slice(0, this.itemsPerColumn);
+            for (let item of items) {
+                if (this.getCategoryId(item) === bestCategoryId) {
+                    sourceColumn = column;
+                    break;
+                }
+            }
+
+            if (sourceColumn) {
+                break;
+            }
+        }
+
+        // If we found both source and destination, return them
+        if (sourceColumn && bestDestinationColumn) {
+            return {
+                source: sourceColumn,       // Player taps this FIRST to get the card into swap slot
+                destination: bestDestinationColumn // Player taps this SECOND to complete the match
+            };
+        }
+
+        return null;
     }
 
     private getAllItems(): Node[] {
@@ -947,7 +1089,45 @@ export class GameManager extends Component {
             if (this.idleHintTimer >= this.idleHintDelaySeconds) {
                 this.showIdleHint();
             }
+        } else if (this.idleHintStage === 1) {
+            // Multi-stage hint: After showing destination for 2 seconds, transition to source
+            this.idleHintTimer += deltaTime;
+            if (this.idleHintTimer >= 2.0) {
+                this.transitionToDestinationHint();
+            }
         }
+        // Stage 0 = instant-win (no transition needed) - just keep showing the same column
+        // Stage 2 = showing source column, no further transitions
+    }
+
+    private transitionToDestinationHint() {
+        if (!this.idleHintSourceColumn?.length || !this.idleHintDestinationColumn?.length) {
+            return;
+        }
+
+        this.idleHintStage = 2;
+        this.idleHintTimer = 0;
+
+        // Stop card scale animations on destination column
+        this.idleHintDestinationColumn.forEach((item) => {
+            Tween.stopAllByTarget(item);
+            item.setScale(item.getScale());
+        });
+
+        // Hide destination column highlight
+        const destMarkNode = this.getColumnMatchMarkNode(this.idleHintDestinationColumn);
+        if (destMarkNode) {
+            Tween.stopAllByTarget(destMarkNode);
+            destMarkNode.active = false;
+        }
+
+        // Stop and fully hide current hand before showing new one
+        if (this.tutorialController) {
+            this.tutorialController.stopTutorial();
+        }
+
+        // Show source column highlight (the one with the card needed)
+        this.displayHintColumn(this.idleHintSourceColumn, true);
     }
 }
 
