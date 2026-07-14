@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity, Label, Tween } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity, Label, Tween, instantiate } from 'cc';
 import { CTAButtonHandler } from './CTAButtonHandler';
 import { TutorialController } from './TutorialController';
 import { Analytics, analyticsEvents } from './Analytics';
@@ -47,6 +47,15 @@ export class GameManager extends Component {
 
     @property({ type: [Node], tooltip: 'Down arrow nodes ordered from left to right below the board columns.' })
     public downArrowNodes: Node[] = [];
+
+    @property({ type: Node, tooltip: 'Back card visual used for the start reveal animation.' })
+    public backCardTemplate: Node | null = null;
+
+    @property({ type: Number, tooltip: 'Delay between each column reveal at game start.' })
+    public cardRevealColumnDelaySeconds: number = 0.16;
+
+    @property({ type: Number, tooltip: 'Small row stagger inside each revealing column.' })
+    public cardRevealRowDelaySeconds: number = 0.035;
 
     @property(Node)
     public tutorialNode: Node | null = null;
@@ -100,8 +109,7 @@ export class GameManager extends Component {
         this.remainingTime = this.gameDurationSeconds;
         this.updateCountdownLabel();
         this.hideCtaNode();
-        this.showGuideLabel();
-        this.startTutorial();
+        this.playStartCardReveal();
         // Fire DISPLAYED on initial load so analytics records that the playable is ready
         if (!this.analyticsDisplayedFired && Analytics.instance) {
             this.analyticsDisplayedFired = true;
@@ -139,6 +147,101 @@ export class GameManager extends Component {
         });
 
         this.boardColumns = columns.map((column) => column.items);
+    }
+
+    private playStartCardReveal() {
+        const backTemplate = this.getBackCardTemplate();
+        if (!backTemplate || !this.boardColumns.length) {
+            this.beginTutorialAfterReveal();
+            return;
+        }
+
+        backTemplate.active = false;
+        this.isSwapping = true;
+
+        const sortedColumns = this.boardColumns
+            .slice()
+            .sort((a, b) => this.getColumnCenterWorldX(a) - this.getColumnCenterWorldX(b));
+        let longestDelay = 0;
+
+        sortedColumns.forEach((column, columnIndex) => {
+            column.slice(0, this.itemsPerColumn).forEach((item, rowIndex) => {
+                const delay = columnIndex * this.cardRevealColumnDelaySeconds + rowIndex * this.cardRevealRowDelaySeconds;
+                longestDelay = Math.max(longestDelay, delay);
+                this.prepareAndRevealCard(item, backTemplate, delay);
+            });
+        });
+
+        this.scheduleOnce(() => {
+            this.isSwapping = false;
+            this.beginTutorialAfterReveal();
+        }, longestDelay + 0.42);
+    }
+
+    private getBackCardTemplate(): Node | null {
+        if (this.backCardTemplate?.isValid) {
+            return this.backCardTemplate;
+        }
+
+        return this.findNodeByName(this.node.scene || this.node, 'Back Card');
+    }
+
+    private findNodeByName(root: Node, nodeName: string): Node | null {
+        if (root.name === nodeName) {
+            return root;
+        }
+
+        for (const child of root.children) {
+            const match = this.findNodeByName(child, nodeName);
+            if (match) {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    private prepareAndRevealCard(item: Node, backTemplate: Node, delay: number) {
+        if (!item.parent) {
+            return;
+        }
+
+        const originalLocalScale = item.getScale().clone();
+        const originalWorldScale = item.getWorldScale(new Vec3());
+        const itemWorldPosition = item.getWorldPosition(new Vec3());
+        const cover = instantiate(backTemplate);
+        cover.name = 'RevealBackCard';
+        cover.active = true;
+        cover.setParent(item.parent);
+        cover.setWorldPosition(itemWorldPosition);
+        cover.setWorldScale(originalWorldScale);
+        cover.setSiblingIndex(item.parent.children.length - 1);
+
+        const itemTransform = item.getComponent(UITransform);
+        const coverTransform = cover.getComponent(UITransform);
+        if (itemTransform && coverTransform) {
+            coverTransform.setContentSize(itemTransform.contentSize.width, itemTransform.contentSize.height);
+        }
+
+        item.setScale(new Vec3(0.02, originalLocalScale.y, originalLocalScale.z));
+
+        tween(cover)
+            .delay(delay)
+            .to(0.16, { scale: new Vec3(0.02, cover.scale.y, cover.scale.z) }, { easing: easing.quadIn })
+            .call(() => {
+                cover.active = false;
+                item.setScale(new Vec3(0.02, originalLocalScale.y, originalLocalScale.z));
+                tween(item)
+                    .to(0.16, { scale: originalLocalScale }, { easing: easing.quadOut })
+                    .call(() => cover.destroy())
+                    .start();
+            })
+            .start();
+    }
+
+    private beginTutorialAfterReveal() {
+        this.showGuideLabel();
+        this.startTutorial();
     }
 
     private addTapHandler(item: Node) {
