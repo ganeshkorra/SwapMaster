@@ -33,6 +33,21 @@ export class Analytics extends Component {
     // Debug counter for testing
     private static eventCounts: Map<string, number> = new Map();
     private static hasInitialized: boolean = false;
+    // Set of allowed AppLovin event names (explicit list to avoid runtime polyfill needs)
+    private static allowedEvents: Set<string> = new Set([
+        analyticsEvents.LOADING,
+        analyticsEvents.LOADED,
+        analyticsEvents.DISPLAYED,
+        analyticsEvents.CHALLENGE_STARTED,
+        analyticsEvents.CHALLENGE_FAILED,
+        analyticsEvents.CHALLENGE_RETRY,
+        analyticsEvents.CHALLENGE_PASS_25,
+        analyticsEvents.CHALLENGE_PASS_50,
+        analyticsEvents.CHALLENGE_PASS_75,
+        analyticsEvents.CHALLENGE_SOLVED,
+        analyticsEvents.CTA_CLICKED,
+        analyticsEvents.ENDCARD_SHOWN,
+    ]);
 
     onLoad() {
         Analytics._instance = this;
@@ -51,6 +66,12 @@ export class Analytics extends Component {
      * Sends the event to AppLovin if the SDK is present, otherwise dispatches to the browser.
      */
     public dispatchEvent(eventName: analyticsEvents | string) {
+        // Only allow predefined AppLovin events
+        if (!Analytics.allowedEvents.has(eventName)) {
+            // Ignore unknown/custom events to comply with AppLovin guidelines
+            return;
+        }
+
         // Track event count for debugging
         const currentCount = (Analytics.eventCounts.get(eventName) || 0) + 1;
         Analytics.eventCounts.set(eventName, currentCount);

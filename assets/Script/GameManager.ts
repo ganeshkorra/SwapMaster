@@ -134,7 +134,6 @@ export class GameManager extends Component {
         }
 
         const handler = () => {
-            console.log('Tapped item', item.name);
             this.onItemTap(item);
         };
 
@@ -145,13 +144,11 @@ export class GameManager extends Component {
 
     private setupTapHandlers() {
         if (!this.categoryElements.length) {
-            console.warn('GameManager: categoryElements is empty. Assign categories in the inspector.');
             return;
         }
 
         const allItems = this.getAllItems();
         if (!allItems.length) {
-            console.warn('GameManager: no items found. Assign items in categoryElements.');
             return;
         }
 
@@ -193,23 +190,19 @@ export class GameManager extends Component {
         }
 
         if (this.fakeCardNode && tappedItem.parent === this.fakeCardNode) {
-            console.log('Tapped fixed swap slot, ignoring.');
             return;
         }
 
         if (this.swapCard && tappedItem === this.swapCard) {
-            console.log('Tapped the fixed swapCard node, ignoring.');
             return;
         }
 
         const columnItems = this.boardColumns.find((column) => column.indexOf(tappedItem) !== -1);
         if (!columnItems || columnItems.length < this.itemsPerColumn) {
-            console.warn('GameManager: tapped item column has fewer than', this.itemsPerColumn, 'items.');
             return;
         }
 
         if (this.completedColumns.has(columnItems)) {
-            console.log('Tapped completed column, ignoring.');
             return;
         }
 
@@ -278,12 +271,10 @@ export class GameManager extends Component {
         // Show yellow column highlight
         let markNode = this.getColumnMatchMarkNode(column);
         if (!markNode) {
-            console.log('GameManager: Creating new mark node for idle hint');
             markNode = this.createColumnMatchMark(column, items);
         } else {
             // Clean up any previous animation on mark node
             Tween.stopAllByTarget(markNode);
-            console.log('GameManager: Reusing existing mark node, cleaned up tweens');
         }
         if (markNode) {
             markNode.active = true;
@@ -640,12 +631,30 @@ export class GameManager extends Component {
         }
         const items = column.slice(0, this.itemsPerColumn);
         this.setColumnMatchedVisual(items, true, column, false);
-        // If this is the first completed column, fire the 25% progress analytic
-        const wasFirstCompletion = this.completedColumns.size === 0;
+        // Add to completed set
         this.completedColumns.add(column);
-        if (wasFirstCompletion && !this.analyticsPass25Fired && Analytics.instance) {
-            this.analyticsPass25Fired = true;
-            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_25);
+
+        // Dispatch progress milestones based on completed columns fraction,
+        // but only after the challenge has started (per AppLovin guidance).
+        if (this.analyticsChallengeStartedFired) {
+            const totalColumns = Math.max(1, this.boardColumns.length);
+            const completedCount = this.completedColumns.size;
+            const progress = completedCount / totalColumns;
+
+            if (progress >= 0.25 && !this.analyticsPass25Fired && Analytics.instance) {
+                this.analyticsPass25Fired = true;
+                Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_25);
+            }
+
+            if (progress >= 0.5 && !this.analyticsPass50Fired && Analytics.instance) {
+                this.analyticsPass50Fired = true;
+                Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_50);
+            }
+
+            if (progress >= 0.75 && !this.analyticsPass75Fired && Analytics.instance) {
+                this.analyticsPass75Fired = true;
+                Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_75);
+            }
         }
     }
 
@@ -1095,10 +1104,7 @@ export class GameManager extends Component {
         }
 
         if (ctaHandler) {
-            console.log(`Game ended with ${result}; triggering CTA end screen.`);
             ctaHandler.onStoreButtonClicked();
-        } else {
-            console.warn('GameManager: CTAButtonHandler not found. Assign the CTA node in the inspector or attach the component to the game node.');
         }
     }
 
@@ -1113,13 +1119,11 @@ export class GameManager extends Component {
         this.updateCountdownLabel();
 
         if (result === 'win') {
-            console.log('Game over: you won.');
             if (!this.analyticsSolvedFired && Analytics.instance) {
                 this.analyticsSolvedFired = true;
                 Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_SOLVED);
             }
         } else {
-            console.log('Game over: time is up.');
             if (!this.analyticsFailedFired && Analytics.instance) {
                 this.analyticsFailedFired = true;
                 Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_FAILED);
@@ -1132,6 +1136,17 @@ export class GameManager extends Component {
         }
 
         this.triggerCtaForEndScreen(result);
+    }
+
+    /**
+     * Call this when the player retries a failed challenge (explicit retry flow).
+     * This method only reports the AppLovin `CHALLENGE_RETRY` event — it does not
+     * perform any game reset logic. Callers should reset game state as needed.
+     */
+    public reportChallengeRetry() {
+        if (Analytics.instance) {
+            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_RETRY);
+        }
     }
 
     update(deltaTime: number) {
@@ -1147,23 +1162,7 @@ export class GameManager extends Component {
             return;
         }
 
-        // Track progress milestones
-        const progressPercentage = (this.gameDurationSeconds - this.remainingTime) / this.gameDurationSeconds;
-        
-        if (progressPercentage >= 0.25 && !this.analyticsPass25Fired && Analytics.instance) {
-            this.analyticsPass25Fired = true;
-            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_25);
-        }
-        
-        if (progressPercentage >= 0.5 && !this.analyticsPass50Fired && Analytics.instance) {
-            this.analyticsPass50Fired = true;
-            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_50);
-        }
-        
-        if (progressPercentage >= 0.75 && !this.analyticsPass75Fired && Analytics.instance) {
-            this.analyticsPass75Fired = true;
-            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_75);
-        }
+        // Milestones are reported when columns complete (see completeColumn())
 
         if (!this.idleHintActive) {
             this.idleHintTimer += deltaTime;
