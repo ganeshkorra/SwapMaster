@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity, Label, Tween } from 'cc';
 import { CTAButtonHandler } from './CTAButtonHandler';
 import { TutorialController } from './TutorialController';
+import { Analytics, analyticsEvents } from './Analytics';
 const { ccclass, property } = _decorator;
 
 @ccclass('CategoryElement')
@@ -67,6 +68,13 @@ export class GameManager extends Component {
     private idleHintDestinationColumn: Node[] | null = null;
     private idleHintStage: number = 0; // 0 = no hint, 1 = showing source, 2 = showing destination
     private idleHintOriginalScales: Map<Node, Vec3> = new Map();
+    
+    // Analytics tracking
+    private analyticsDisplayedFired: boolean = false;
+    private analyticsChallengeStartedFired: boolean = false;
+    private analyticsPass25Fired: boolean = false;
+    private analyticsPass50Fired: boolean = false;
+    private analyticsPass75Fired: boolean = false;
 
     start() {
         this.initializeColumns();
@@ -994,6 +1002,18 @@ export class GameManager extends Component {
         this.idleHintTimer = 0;
         this.hideIdleHint();
         this.updateCountdownLabel();
+        
+        // Fire DISPLAYED event when game becomes interactive
+        if (!this.analyticsDisplayedFired && Analytics.instance) {
+            this.analyticsDisplayedFired = true;
+            Analytics.instance.dispatchEvent(analyticsEvents.DISPLAYED);
+        }
+        
+        // Fire CHALLENGE_STARTED event
+        if (!this.analyticsChallengeStartedFired && Analytics.instance) {
+            this.analyticsChallengeStartedFired = true;
+            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_STARTED);
+        }
     }
 
     private updateCountdownLabel() {
@@ -1082,6 +1102,24 @@ export class GameManager extends Component {
         if (this.remainingTime <= 0) {
             this.endGame('loss');
             return;
+        }
+
+        // Track progress milestones
+        const progressPercentage = (this.gameDurationSeconds - this.remainingTime) / this.gameDurationSeconds;
+        
+        if (progressPercentage >= 0.25 && !this.analyticsPass25Fired && Analytics.instance) {
+            this.analyticsPass25Fired = true;
+            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_25);
+        }
+        
+        if (progressPercentage >= 0.5 && !this.analyticsPass50Fired && Analytics.instance) {
+            this.analyticsPass50Fired = true;
+            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_50);
+        }
+        
+        if (progressPercentage >= 0.75 && !this.analyticsPass75Fired && Analytics.instance) {
+            this.analyticsPass75Fired = true;
+            Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_75);
         }
 
         if (!this.idleHintActive) {
