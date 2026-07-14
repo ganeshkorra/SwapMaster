@@ -6,6 +6,9 @@ const { ccclass, property } = _decorator;
 
 @ccclass('CategoryElement')
 export class CategoryElement {
+    @property({ type: Node, tooltip: 'Green label node for this card family. It will show above the column when this family is matched.' })
+    public categoryLabelNode: Node | null = null;
+
     @property({ type: [Node] })
     public items: Node[] = [];
 }
@@ -82,6 +85,7 @@ export class GameManager extends Component {
     start() {
         this.initializeColumns();
         this.buildCategoryLookup();
+        this.initializeCategoryLabels();
         this.setupTapHandlers();
         this.updateMatchedColumns();
         this.remainingTime = this.gameDurationSeconds;
@@ -534,6 +538,46 @@ export class GameManager extends Component {
         return this.categoryLookup.get(item) ?? -1;
     }
 
+    private initializeCategoryLabels() {
+        this.categoryElements.forEach((category) => {
+            if (category.categoryLabelNode) {
+                category.categoryLabelNode.active = false;
+            }
+        });
+    }
+
+    private getColumnCenterWorldX(column: Node[]): number {
+        const items = column.slice(0, this.itemsPerColumn);
+        const bounds = this.getColumnWorldBounds(items.length ? items : column);
+        if (bounds) {
+            return (bounds.minX + bounds.maxX) * 0.5;
+        }
+
+        return column[0]?.getWorldPosition(new Vec3()).x || 0;
+    }
+
+    private displayColumnCategoryLabel(column: Node[], categoryId: number) {
+        const labelNode = this.categoryElements[categoryId]?.categoryLabelNode;
+        if (!labelNode) {
+            return;
+        }
+
+        this.moveCategoryLabelToColumn(labelNode, column);
+        labelNode.active = true;
+    }
+
+    private moveCategoryLabelToColumn(labelNode: Node, column: Node[]) {
+        const parentTransform = labelNode.parent?.getComponent(UITransform);
+        if (!parentTransform) {
+            return;
+        }
+
+        const worldPosition = labelNode.getWorldPosition(new Vec3());
+        worldPosition.x = this.getColumnCenterWorldX(column);
+        const localPosition = parentTransform.convertToNodeSpaceAR(worldPosition);
+        labelNode.setPosition(new Vec3(localPosition.x, labelNode.position.y, labelNode.position.z));
+    }
+
     private updateMatchedColumns() {
         this.boardColumns.forEach((column) => {
             const items = column.slice(0, this.itemsPerColumn);
@@ -630,7 +674,9 @@ export class GameManager extends Component {
             return;
         }
         const items = column.slice(0, this.itemsPerColumn);
+        const categoryId = this.getCategoryId(items[0]);
         this.setColumnMatchedVisual(items, true, column, false);
+        this.displayColumnCategoryLabel(column, categoryId);
         // Add to completed set
         this.completedColumns.add(column);
 
@@ -1217,5 +1263,3 @@ export class GameManager extends Component {
         this.displayHintColumn(this.idleHintSourceColumn, true);
     }
 }
-
-
