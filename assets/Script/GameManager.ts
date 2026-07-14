@@ -237,7 +237,7 @@ export class GameManager extends Component {
             tween(item)
                 .repeatForever(
                     tween()
-                        .to(0.35, { scale: new Vec3(currentScale.x * 1.08, currentScale.y * 1.08, currentScale.z) }, { easing: easing.quadOut })
+                        .to(0.35, { scale: new Vec3(currentScale.x * 1.01, currentScale.y * 1.01, currentScale.z) }, { easing: easing.quadOut })
                         .to(0.35, { scale: currentScale }, { easing: easing.quadIn })
                 )
                 .start();
