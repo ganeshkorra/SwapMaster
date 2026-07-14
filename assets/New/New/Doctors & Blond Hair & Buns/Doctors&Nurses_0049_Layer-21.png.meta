@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "e8bc76cb-1092-4951-9f43-6490e2754c13",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "e8bc76cb-1092-4951-9f43-6490e2754c13@6c48a",
+      "displayName": "Doctors&Nurses_0049_Layer-21",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "e8bc76cb-1092-4951-9f43-6490e2754c13",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "e8bc76cb-1092-4951-9f43-6490e2754c13@f9941",
+      "displayName": "Doctors&Nurses_0049_Layer-21",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": -8,
+        "trimX": 78,
+        "trimY": 16,
+        "width": 356,
+        "height": 496,
+        "rawWidth": 512,
+        "rawHeight": 512,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -178,
+            -248,
+            0,
+            178,
+            -248,
+            0,
+            -178,
+            248,
+            0,
+            178,
+            248,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            78,
+            496,
+            434,
+            496,
+            78,
+            0,
+            434,
+            0
+          ],
+          "nuv": [
+            0.15234375,
+            0,
+            0.84765625,
+            0,
+            0.15234375,
+            0.96875,
+            0.84765625,
+            0.96875
+          ],
+          "minPos": [
+            -178,
+            -248,
+            0
+          ],
+          "maxPos": [
+            178,
+            248,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "e8bc76cb-1092-4951-9f43-6490e2754c13@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "e8bc76cb-1092-4951-9f43-6490e2754c13@6c48a"
+  }
+}
