@@ -72,9 +72,13 @@ export class GameManager extends Component {
     @property({ type: Number, tooltip: 'Seconds of inactivity before showing the idle hint.' })
     public idleHintDelaySeconds: number = 5;
 
+    @property({ type: Number, tooltip: 'Show the CTA/end screen after this many completed swaps. Set 0 to disable.' })
+    public swapsBeforeCta: number = 5;
+
     private timerStarted: boolean = false;
     private gameEnded: boolean = false;
     private remainingTime: number = 0;
+    private completedSwapCount: number = 0;
     private tutorialGuideVisible: boolean = false;
     private tutorialGuideBaseScale: Vec3 = Vec3.ONE.clone();
     private tutorialController: TutorialController | null = null;
@@ -985,6 +989,12 @@ export class GameManager extends Component {
                 Analytics.instance.dispatchEvent(analyticsEvents.CHALLENGE_PASS_75);
             }
         }
+
+        if (!this.gameEnded && this.completedColumns.size >= 2) {
+            this.scheduleOnce(() => {
+                this.endGame('win', 0);
+            }, 0.45);
+        }
     }
 
     private layoutColumnMatchMark(markNode: Node, items: Node[]) {
@@ -1298,7 +1308,19 @@ export class GameManager extends Component {
         this.scheduleOnce(() => {
             this.updateMatchedColumns();
             this.isSwapping = false;
+            this.registerCompletedSwap();
         }, 0.62);
+    }
+
+    private registerCompletedSwap() {
+        if (this.gameEnded || this.swapsBeforeCta <= 0) {
+            return;
+        }
+
+        this.completedSwapCount++;
+        if (this.completedSwapCount >= this.swapsBeforeCta) {
+            this.endGame('win', 0);
+        }
     }
 
     private startTutorial() {
@@ -1495,7 +1517,7 @@ export class GameManager extends Component {
         }
     }
 
-    private endGame(result: 'win' | 'loss') {
+    private endGame(result: 'win' | 'loss', ctaDelaySeconds: number = result === 'win' ? 1.5 : 0) {
         if (this.gameEnded) {
             return;
         }
@@ -1522,11 +1544,11 @@ export class GameManager extends Component {
             Analytics.instance.dispatchEvent(analyticsEvents.ENDCARD_SHOWN);
         }
 
-        // On win, delay showing CTA for a short moment for better UX
-        if (result === 'win') {
+        // On win, delay showing CTA for a short moment for better UX unless caller requests immediate endscreen.
+        if (ctaDelaySeconds > 0) {
             this.scheduleOnce(() => {
                 this.triggerCtaForEndScreen(result);
-            }, 1.5);
+            }, ctaDelaySeconds);
         } else {
             this.triggerCtaForEndScreen(result);
         }
