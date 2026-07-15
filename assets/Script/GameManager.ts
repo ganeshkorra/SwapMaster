@@ -1205,11 +1205,13 @@ export class GameManager extends Component {
             }
         }
 
-        if (!this.gameEnded && this.completedColumns.size >= 2) {
-            this.scheduleOnce(() => {
-                this.endGame('win', 0);
-            }, 0.45);
-        }
+        // CTA is now tied to the real win condition in updateMatchedColumns().
+        // Old shortcut disabled: previously ended after 2 matched columns.
+        // if (!this.gameEnded && this.completedColumns.size >= 2) {
+        //     this.scheduleOnce(() => {
+        //         this.endGame('win', 0);
+        //     }, 0.45);
+        // }
     }
 
     private layoutColumnMatchMark(markNode: Node, items: Node[]) {
@@ -1528,14 +1530,16 @@ export class GameManager extends Component {
     }
 
     private registerCompletedSwap() {
-        if (this.gameEnded || this.swapsBeforeCta <= 0) {
+        if (this.gameEnded) {
             return;
         }
 
         this.completedSwapCount++;
-        if (this.completedSwapCount >= this.swapsBeforeCta) {
-            this.endGame('win', 0);
-        }
+        // CTA is now tied to the real win condition in updateMatchedColumns().
+        // Old shortcut disabled: previously ended after configured swap/click count.
+        // if (this.swapsBeforeCta > 0 && this.completedSwapCount >= this.swapsBeforeCta) {
+        //     this.endGame('win', 0);
+        // }
     }
 
     private startTutorial() {
