@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity, Label, Tween, instantiate } from 'cc';
+import { _decorator, Component, Node, Vec3, tween, easing, Sprite, Color, UITransform, Graphics, UIOpacity, Label, Tween, instantiate, SpriteFrame, game } from 'cc';
 import { CTAButtonHandler } from './CTAButtonHandler';
 import { TutorialController } from './TutorialController';
 import { Analytics, analyticsEvents } from './Analytics';
@@ -73,12 +73,37 @@ export class GameManager extends Component {
     public idleHintDelaySeconds: number = 5;
 
     @property({ type: Number, tooltip: 'Show the CTA/end screen after this many completed swaps. Set 0 to disable.' })
-    public swapsBeforeCta: number = 5;
+    public swapsBeforeCta: number = 55;
+
+    @property({ tooltip: 'Hide the native mouse cursor and show an in-game hand cursor instead.' })
+    public useCustomHandCursor: boolean = true;
+
+    @property({ type: SpriteFrame, tooltip: 'Optional idle cursor hand. If empty, uses TutorialController idleHandSprite.' })
+    public cursorIdleSprite: SpriteFrame | null = null;
+
+    @property({ type: SpriteFrame, tooltip: 'Optional click cursor hand. If empty, uses TutorialController clickHandSprite.' })
+    public cursorClickSprite: SpriteFrame | null = null;
+
+    @property({ tooltip: 'Browser cursor image used for the idle hand.' })
+    public cursorIdleImageUrl: string = 'assets/CTA/CursorIdle.png';
+
+    @property({ tooltip: 'Browser cursor image used for the clicking hand.' })
+    public cursorClickImageUrl: string = 'assets/CTA/CursorClick.png';
+
+    @property({ type: Number, tooltip: 'CSS cursor hotspot X, measured from the image left.' })
+    public cursorHotspotOffsetX: number = 13;
+
+    @property({ type: Number, tooltip: 'CSS cursor hotspot Y, measured from the image top.' })
+    public cursorHotspotOffsetY: number = 3;
 
     private timerStarted: boolean = false;
     private gameEnded: boolean = false;
     private remainingTime: number = 0;
     private completedSwapCount: number = 0;
+    private customCursorPointerDownHandler: ((event: PointerEvent) => void) | null = null;
+    private customCursorPointerUpHandler: ((event: PointerEvent) => void) | null = null;
+    private cursorIdleCssDataUrl: string = '';
+    private cursorClickCssDataUrl: string = '';
     private tutorialGuideVisible: boolean = false;
     private tutorialGuideBaseScale: Vec3 = Vec3.ONE.clone();
     private tutorialController: TutorialController | null = null;
@@ -113,6 +138,7 @@ export class GameManager extends Component {
         this.remainingTime = this.gameDurationSeconds;
         this.updateCountdownLabel();
         this.hideCtaNode();
+        this.setupCustomHandCursor();
         this.playStartCardReveal();
         // Fire DISPLAYED on initial load so analytics records that the playable is ready
         if (!this.analyticsDisplayedFired && Analytics.instance) {
@@ -125,6 +151,195 @@ export class GameManager extends Component {
         this.idleHintDestinationColumn = null;
         this.idleHintStage = 0;
         this.idleHintOriginalScales.clear();
+    }
+
+    onDestroy() {
+        this.restoreNativeCursor();
+        this.unbindCssHandCursorEvents();
+    }
+
+    private setupCustomHandCursor() {
+        if (!this.useCustomHandCursor) {
+            return;
+        }
+
+        this.prepareCssHandCursorImages();
+        this.setCssHandCursor(false);
+        this.bindCssHandCursorEvents();
+    }
+
+    private getTutorialController(): TutorialController | null {
+        const tutorialRoot = this.tutorialNode || this.node;
+        return tutorialRoot.getComponent(TutorialController) || tutorialRoot.getComponentInChildren(TutorialController) || null;
+    }
+
+    private hideNativeCursor() {
+        const canvas = game.canvas as unknown as { style?: { cursor: string } };
+        if (canvas?.style) {
+            canvas.style.cursor = 'none';
+        }
+    }
+
+    private bindCssHandCursorEvents() {
+        const canvas = game.canvas as HTMLCanvasElement | null;
+        if (!canvas || this.customCursorPointerDownHandler) {
+            return;
+        }
+
+        this.customCursorPointerDownHandler = () => this.setCssHandCursor(true);
+        this.customCursorPointerUpHandler = () => this.setCssHandCursor(false);
+
+        canvas.addEventListener('pointerdown', this.customCursorPointerDownHandler, { passive: true });
+        canvas.addEventListener('pointerup', this.customCursorPointerUpHandler, { passive: true });
+        canvas.addEventListener('pointercancel', this.customCursorPointerUpHandler, { passive: true });
+        canvas.addEventListener('pointerleave', this.customCursorPointerUpHandler, { passive: true });
+    }
+
+    private unbindCssHandCursorEvents() {
+        const canvas = game.canvas as HTMLCanvasElement | null;
+        if (!canvas) {
+            return;
+        }
+
+        if (this.customCursorPointerDownHandler) {
+            canvas.removeEventListener('pointerdown', this.customCursorPointerDownHandler);
+        }
+
+        if (this.customCursorPointerUpHandler) {
+            canvas.removeEventListener('pointerup', this.customCursorPointerUpHandler);
+            canvas.removeEventListener('pointercancel', this.customCursorPointerUpHandler);
+            canvas.removeEventListener('pointerleave', this.customCursorPointerUpHandler);
+        }
+
+        this.customCursorPointerDownHandler = null;
+        this.customCursorPointerUpHandler = null;
+    }
+
+    private setCssHandCursor(clicking: boolean) {
+        const canvas = game.canvas as unknown as { style?: { cursor: string } };
+        if (!canvas?.style) {
+            return;
+        }
+
+        const imageUrl = clicking
+            ? (this.cursorClickCssDataUrl || this.cursorClickImageUrl)
+            : (this.cursorIdleCssDataUrl || this.cursorIdleImageUrl);
+        canvas.style.cursor = imageUrl
+            ? `url("${imageUrl}") ${this.cursorHotspotOffsetX} ${this.cursorHotspotOffsetY}, pointer`
+            : 'pointer';
+    }
+
+    private prepareCssHandCursorImages() {
+        const controller = this.getTutorialController();
+        const idleSprite = this.cursorIdleSprite || controller?.idleHandSprite || null;
+        const clickSprite = this.cursorClickSprite || controller?.clickHandSprite || null;
+
+        const idleDataUrl = this.tryBuildCursorDataUrlFromSpriteFrame(idleSprite);
+        if (idleDataUrl) {
+            this.cursorIdleCssDataUrl = idleDataUrl;
+            this.setCssHandCursor(false);
+        } else {
+            this.loadCursorCssDataUrl(this.cursorIdleImageUrl, (dataUrl) => {
+                this.cursorIdleCssDataUrl = dataUrl;
+                this.setCssHandCursor(false);
+            });
+        }
+
+        const clickDataUrl = this.tryBuildCursorDataUrlFromSpriteFrame(clickSprite);
+        if (clickDataUrl) {
+            this.cursorClickCssDataUrl = clickDataUrl;
+        } else {
+            this.loadCursorCssDataUrl(this.cursorClickImageUrl, (dataUrl) => {
+                this.cursorClickCssDataUrl = dataUrl;
+            });
+        }
+    }
+
+    private tryBuildCursorDataUrlFromSpriteFrame(spriteFrame: SpriteFrame | null): string {
+        if (!spriteFrame) {
+            return '';
+        }
+
+        const frame = spriteFrame as unknown as {
+            texture?: unknown;
+            _texture?: unknown;
+        };
+        const texture = (frame.texture || frame._texture) as {
+            image?: unknown;
+            _image?: unknown;
+            _mipmaps?: unknown[];
+            mipmaps?: unknown[];
+            getHtmlElementObj?: () => unknown;
+        } | null;
+
+        const source =
+            texture?.getHtmlElementObj?.() ||
+            texture?.image ||
+            texture?._image ||
+            texture?._mipmaps?.[0] ||
+            texture?.mipmaps?.[0];
+
+        return this.buildCursorDataUrlFromImageSource(source);
+    }
+
+    private buildCursorDataUrlFromImageSource(source: unknown): string {
+        const asset = source as {
+            data?: unknown;
+            _nativeAsset?: unknown;
+            src?: string;
+            width?: number;
+            height?: number;
+        } | null;
+
+        const imageSource = asset?.data || asset?._nativeAsset || source;
+        if (imageSource instanceof HTMLImageElement || imageSource instanceof HTMLCanvasElement) {
+            return this.createCursorDataUrl(imageSource);
+        }
+
+        return '';
+    }
+
+    private createCursorDataUrl(image: HTMLImageElement | HTMLCanvasElement): string {
+        const maxSize = 96;
+        const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+        if (!context) {
+            return '';
+        }
+
+        context.drawImage(image, 0, 0, width, height);
+        return canvas.toDataURL('image/png');
+    }
+
+    private loadCursorCssDataUrl(sourceUrl: string, onLoaded: (dataUrl: string) => void) {
+        if (!sourceUrl) {
+            return;
+        }
+
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => {
+            const dataUrl = this.createCursorDataUrl(image);
+            if (dataUrl) {
+                onLoaded(dataUrl);
+            }
+        };
+        image.onerror = () => {
+            // Keep the current browser cursor fallback if this path is unavailable in a build.
+        };
+        image.src = sourceUrl;
+    }
+
+    private restoreNativeCursor() {
+        const canvas = game.canvas as unknown as { style?: { cursor: string } };
+        if (canvas?.style) {
+            canvas.style.cursor = '';
+        }
     }
 
     private initializeColumns() {
@@ -577,7 +792,7 @@ export class GameManager extends Component {
                     const matchingCount = items.filter((item) => this.getCategoryId(item) === swapCardCategoryId).length;
 
                     // If this column has 2-3 matching items, it's an instant win
-                    if (matchingCount >= 2 && matchingCount < this.itemsPerColumn) {
+                    if (matchingCount >= 4 && matchingCount < this.itemsPerColumn) {
                         instantWinColumn = column;
                         break; // Found the best hint - stop searching
                     }

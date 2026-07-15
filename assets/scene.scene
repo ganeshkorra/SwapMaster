@@ -5351,7 +5351,7 @@
       "__id__": 2
     },
     "_children": [],
-    "_active": true,
+    "_active": false,
     "_components": [
       {
         "__id__": 143
@@ -5700,7 +5700,7 @@
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
-      "x": 0.5,
+      "x": 0,
       "y": 0.5
     },
     "_id": "1fYwqQu7RKRIKcSxp8uQhe"
@@ -5754,14 +5754,8 @@
     "handNode": {
       "__id__": 149
     },
-    "idleHandSprite": {
-      "__uuid__": "b7af3458-6b78-4c44-9d8c-74581243a441@f9941",
-      "__expectedType__": "cc.SpriteFrame"
-    },
-    "clickHandSprite": {
-      "__uuid__": "b4e1ac65-641f-42e6-8a00-be0b63b55807@f9941",
-      "__expectedType__": "cc.SpriteFrame"
-    },
+    "idleHandSprite": null,
+    "clickHandSprite": null,
     "_id": "50ye6Wz6BJqqYwUbmOwnBh"
   },
   {
@@ -7037,9 +7031,7 @@
     "itemsPerColumn": 4,
     "gameDurationSeconds": 60,
     "countdownLabel": null,
-    "tutorialGuideLabel": {
-      "__id__": 144
-    },
+    "tutorialGuideLabel": null,
     "downArrowNodes": [
       {
         "__id__": 21
@@ -7071,8 +7063,21 @@
     "ctaButtonNode": {
       "__id__": 190
     },
-    "idleHintDelaySeconds": 5,
-    "swapsBeforeCta": 5,
+    "idleHintDelaySeconds": 50,
+    "swapsBeforeCta": 30,
+    "useCustomHandCursor": true,
+    "cursorIdleSprite": {
+      "__uuid__": "b7af3458-6b78-4c44-9d8c-74581243a441@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "cursorClickSprite": {
+      "__uuid__": "b4e1ac65-641f-42e6-8a00-be0b63b55807@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "cursorIdleImageUrl": "assets/CTA/CursorIdle.png",
+    "cursorClickImageUrl": "assets/CTA/CursorClick.png",
+    "cursorHotspotOffsetX": 0,
+    "cursorHotspotOffsetY": 0,
     "_id": "8eZfoeLMlMMZfpG8uaqq2j"
   },
   {

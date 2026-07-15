@@ -15,6 +15,7 @@ export class TutorialController extends Component {
     public clickHandSprite: SpriteFrame | null = null;
 
     private handTween: Tween<Node> | null = null;
+    private handBaseScale: Vec3 | null = null;
 
     private getAnimatedHandNode(): Node | null {
         return this.handNode || this.node;
@@ -27,6 +28,27 @@ export class TutorialController extends Component {
         }
 
         return animatedNode.getComponent(Sprite) || animatedNode.getComponentInChildren(Sprite) || null;
+    }
+
+    private setHandState(isClicking: boolean): void {
+        const handSprite = this.getHandSprite();
+        if (!handSprite) {
+            return;
+        }
+
+        const nextFrame = isClicking ? this.clickHandSprite : this.idleHandSprite;
+        if (nextFrame) {
+            handSprite.spriteFrame = nextFrame;
+        }
+    }
+
+    private cacheHandBaseScale(): Vec3 {
+        const animatedNode = this.getAnimatedHandNode();
+        if (!this.handBaseScale && animatedNode) {
+            this.handBaseScale = animatedNode.getScale().clone();
+        }
+
+        return this.handBaseScale ? this.handBaseScale.clone() : Vec3.ONE.clone();
     }
 
     public playTutorial(startNode: Node, endNode: Node): void {
@@ -61,6 +83,9 @@ export class TutorialController extends Component {
         const animatedNode = this.getAnimatedHandNode();
         if (animatedNode) {
             Tween.stopAllByTarget(animatedNode);
+            if (this.handBaseScale) {
+                animatedNode.setScale(this.handBaseScale);
+            }
             animatedNode.active = false;
         }
     }
@@ -83,19 +108,23 @@ export class TutorialController extends Component {
             return;
         }
 
-        handSprite.spriteFrame = this.idleHandSprite;
+        const baseScale = this.cacheHandBaseScale();
+        this.setHandState(false);
+        animatedNode.setScale(baseScale);
         animatedNode.setPosition(startPosition);
 
         this.handTween = tween(animatedNode)
             .delay(0.5)
             .call(() => {
-                handSprite.spriteFrame = this.clickHandSprite!;
+                this.setHandState(true);
             })
-            .delay(0.15)
+            .to(0.08, { scale: new Vec3(baseScale.x * 0.92, baseScale.y * 0.92, baseScale.z) }, { easing: 'quadOut' })
+            .delay(0.07)
             .to(1.5, { position: endPosition }, { easing: 'sineInOut' })
             .call(() => {
-                handSprite.spriteFrame = this.idleHandSprite!;
+                this.setHandState(false);
             })
+            .to(0.08, { scale: baseScale }, { easing: 'quadOut' })
             .delay(0.5)
             .call(() => {
                 this.runAnimationLoop(startNode, endNode);
@@ -177,21 +206,29 @@ export class TutorialController extends Component {
             return;
         }
 
-        handSprite.spriteFrame = this.idleHandSprite;
+        const baseScale = this.cacheHandBaseScale();
+        this.setHandState(false);
         Tween.stopAllByTarget(animatedNode);
         animatedNode.setWorldPosition(targetPosition);
+        animatedNode.setScale(baseScale);
 
         this.handTween = tween(animatedNode)
             .delay(0.5)
             .call(() => {
-                handSprite.spriteFrame = this.clickHandSprite!;
-                tween(animatedNode).by(0.15, { position: new Vec3(0, -10, 0) }).start();
+                this.setHandState(true);
             })
-            .delay(0.3)
+            .parallel(
+                tween().by(0.1, { position: new Vec3(0, -12, 0) }, { easing: 'quadOut' }),
+                tween().to(0.1, { scale: new Vec3(baseScale.x * 0.9, baseScale.y * 0.9, baseScale.z) }, { easing: 'quadOut' })
+            )
+            .delay(0.16)
             .call(() => {
-                handSprite.spriteFrame = this.idleHandSprite!;
-                tween(animatedNode).by(0.15, { position: new Vec3(0, 10, 0) }).start();
+                this.setHandState(false);
             })
+            .parallel(
+                tween().by(0.12, { position: new Vec3(0, 12, 0) }, { easing: 'quadOut' }),
+                tween().to(0.12, { scale: baseScale }, { easing: 'quadOut' })
+            )
             .delay(0.5)
             .call(() => {
                 this.runClickAnimationLoop(targetPosition);
